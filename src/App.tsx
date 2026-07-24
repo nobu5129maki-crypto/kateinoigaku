@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { CameraCapture } from './components/CameraCapture'
+import { InstallPrompt } from './components/InstallPrompt'
 import {
   feverOptions,
   onsetOptions,
@@ -315,6 +316,8 @@ function App() {
           <p className="topbar-note">診断ではなく、受診判断の参考です</p>
         )}
       </header>
+
+      <InstallPrompt />
 
       <main className="stage">
         <AnimatePresence mode="wait">
