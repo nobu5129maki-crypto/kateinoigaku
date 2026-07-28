@@ -158,6 +158,9 @@ const symptomKeywords: { id: SymptomId; keywords: string[] }[] = [
       '胼胝',
       'たこ',
       'タコ',
+      'いぼ',
+      '疣贅',
+      '疥癬',
     ],
   },
   {

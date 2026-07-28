@@ -1047,7 +1047,7 @@ function App() {
               )}
 
               <div className="result-header">
-                <h2>鑑別候補（可能性の高い順）</h2>
+                <h2>鑑別候補（特異度を重視した参考順）</h2>
                 <p>
                   {age}歳・{sexLabel}
                   {selectedSymptoms.length > 0 ? `・症状${selectedSymptoms.length}件` : ''}

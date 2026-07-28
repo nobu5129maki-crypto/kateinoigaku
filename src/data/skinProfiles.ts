@@ -145,6 +145,25 @@ export const skinVisualProfiles: SkinVisualProfile[] = [
       redness: { max: 0.45, weight: 0.4 },
     },
   },
+  {
+    conditionId: 'plantar_wart',
+    labelHint: '足底の疣状隆起・点状の濃い斑',
+    cues: {
+      darkness: { min: 0.25, weight: 1 },
+      contrast: { min: 0.3, weight: 0.9 },
+      yellowness: { min: 0.15, weight: 0.5 },
+      redness: { max: 0.5, weight: 0.4 },
+    },
+  },
+  {
+    conditionId: 'scabies',
+    labelHint: '散在する小さな赤い発疹',
+    cues: {
+      redness: { min: 0.35, weight: 1.1 },
+      contrast: { min: 0.25, weight: 0.7 },
+      variance: { min: 0.25, weight: 0.6 },
+    },
+  },
 ]
 
 export function scoreVisualMatch(features: VisualFeatures, profile: SkinVisualProfile): number {

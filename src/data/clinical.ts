@@ -231,6 +231,12 @@ export const specialtyById: Record<string, string> = {
   sepsis_suspect: '救急・感染症内科',
   kawasaki_suspect: '小児科・救急',
   croup_suspect: '小児科・救急',
+  plantar_wart: '皮膚科',
+  scabies: '皮膚科',
+  strep_pharyngitis: '耳鼻咽喉科・内科',
+  otitis_externa: '耳鼻咽喉科',
+  plantar_fasciitis: '整形外科',
+  vaginal_candidiasis: '婦人科',
 }
 
 /** 危険な見逃し（must-not-miss）を特に意識する疾患ID */

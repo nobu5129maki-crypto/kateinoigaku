@@ -15,6 +15,7 @@ import {
   type ContextFlagId,
   type PainQuality,
 } from '../data/clinicalQuestions'
+import { conditionPrecision } from '../data/conditionPrecision'
 import {
   type AgeGroup,
   type Condition,
@@ -130,9 +131,31 @@ export function evaluateTriage(flagIds: RedFlagId[], age: number): TriageResult 
   }
 }
 
+function buildSymptomIdf(): Map<SymptomId, number> {
+  const df = new Map<SymptomId, number>()
+  for (const c of conditions) {
+    for (const s of new Set(c.symptoms)) {
+      df.set(s, (df.get(s) ?? 0) + 1)
+    }
+  }
+  const n = Math.max(conditions.length, 1)
+  const idf = new Map<SymptomId, number>()
+  for (const [s, count] of df) {
+    idf.set(s, Math.log((n + 1) / (count + 1)) + 1)
+  }
+  return idf
+}
+
+const symptomIdf = buildSymptomIdf()
+
+function textMatchesKeywords(freeText: string, keywords?: string[]): boolean {
+  if (!freeText.trim() || !keywords?.length) return false
+  return keywords.some((k) => freeText.includes(k.normalize('NFKC').toLowerCase()))
+}
+
 function toLikelihood(score: number): 'high' | 'moderate' | 'low' {
-  if (score >= 62) return 'high'
-  if (score >= 42) return 'moderate'
+  if (score >= 68) return 'high'
+  if (score >= 48) return 'moderate'
   return 'low'
 }
 
@@ -172,24 +195,58 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
   }
 
   const ranked: RankedCondition[] = []
+  const rankScores = new Map<string, number>()
 
   for (const condition of conditions) {
     if (condition.ages && !condition.ages.includes(ageGroup)) continue
     if (condition.sexes && !condition.sexes.includes(input.sex)) continue
 
-    const matchedSymptoms = condition.symptoms.filter((s) => selected.has(s))
-    const visualHit = visualByCondition.get(condition.id)
-    const textHint =
-      freeText &&
-      (
-        (condition.id === 'corn_clavus' &&
-          ['魚の目', 'うおのめ', 'ウオノメ', '鶏眼', '胼胝', 'たこ', 'タコ'].some((k) =>
-            freeText.includes(k.normalize('NFKC').toLowerCase()),
-          )) ||
-        (condition.id === 'tinea' && ['水虫', 'たむし', '白癬'].some((k) => freeText.includes(k)))
-      )
+    const precision = conditionPrecision[condition.id] ?? {}
+    const specificity = precision.specificity ?? 2
+    const keySymptoms = precision.keySymptoms ?? []
+    const againstSymptoms = precision.againstSymptoms ?? []
+    const minMatch = precision.minMatch ?? 1
 
-    if (matchedSymptoms.length === 0 && !visualHit && !textHint) continue
+    const matchedSymptoms = condition.symptoms.filter((s) => selected.has(s))
+    const keyMatched = keySymptoms.filter((s) => selected.has(s))
+    const againstMatched = againstSymptoms.filter((s) => selected.has(s))
+    const visualHit = visualByCondition.get(condition.id)
+    const textHint = textMatchesKeywords(freeText, precision.textKeywords)
+
+    // 核症状の過半数（2つ以下なら全部）が無いと、決め手（文章・写真）なしでは出さない
+    const keyNeed =
+      keySymptoms.length === 0 ? 0 : keySymptoms.length <= 2 ? keySymptoms.length : keySymptoms.length - 1
+    if (keySymptoms.length > 0 && keyMatched.length < keyNeed && !textHint && !visualHit) {
+      continue
+    }
+
+    if (
+      matchedSymptoms.length === 0 &&
+      keyMatched.length === 0 &&
+      !visualHit &&
+      !textHint
+    ) {
+      continue
+    }
+
+    if (!textHint && !visualHit && matchedSymptoms.length < minMatch && keyMatched.length === 0) {
+      continue
+    }
+
+    // 発疹だけの特異皮膚疾患は、文章／写真／足病変の問診がないとノイズになるので抑制
+    if (
+      specificity >= 4 &&
+      !textHint &&
+      !visualHit &&
+      matchedSymptoms.length > 0 &&
+      matchedSymptoms.every((s) => s === 'rash' || s === 'itch')
+    ) {
+      const footLike =
+        (condition.id === 'corn_clavus' || condition.id === 'plantar_wart') &&
+        input.skinSite === 'limbs' &&
+        (input.skinSensation === 'painful' || input.skinSensation === 'both')
+      if (!footLike) continue
+    }
 
     const matchRatio =
       condition.symptoms.length === 0
@@ -200,20 +257,54 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
     let score = 0
     const reasons: string[] = []
 
+    // 希少な症状ほど高得点（IDF）→「だるい」だけでは広がらず、特異症状が効く
+    let idfSum = 0
+    for (const s of matchedSymptoms) {
+      idfSum += symptomIdf.get(s) ?? 1
+    }
     if (matchedSymptoms.length > 0) {
-      score += matchedSymptoms.length * 12 + matchRatio * 28 + coverage * 18
+      score += idfSum * 8 + matchRatio * 14 + coverage * 8
       reasons.push(`症状の一致 ${matchedSymptoms.length}/${condition.symptoms.length}`)
-    } else if (visualHit) {
-      score += visualHit.score * 0.55
-      reasons.push('写真所見からの候補')
-    } else if (textHint) {
-      score += 42
-      reasons.push('症状の文章表現から候補')
     }
 
-    if (textHint && condition.id === 'corn_clavus') {
-      score += 28
-      reasons.push('「魚の目・たこ」など典型表現あり')
+    if (keyMatched.length > 0) {
+      const keyRatio = keyMatched.length / Math.max(keySymptoms.length, 1)
+      score += keyMatched.length * 14 + keyRatio * 18
+      reasons.push(`核となる症状 ${keyMatched.length}/${keySymptoms.length}`)
+    } else if (keySymptoms.length > 0 && textHint) {
+      score += 8
+    } else if (keySymptoms.length > 0) {
+      score -= 12
+    }
+
+    if (againstMatched.length > 0) {
+      score -= againstMatched.length * 14
+      reasons.push(`合わない症状あり（−${againstMatched.length}）`)
+    }
+
+    if (textHint) {
+      score += 28 + specificity * 5
+      reasons.push('症状の文章が本症の典型表現に近い')
+    }
+
+    // ざっくり疾患は「一致が薄い」と下げる／特異疾患は上げる
+    score += (specificity - 2) * (textHint || keyMatched.length >= keyNeed ? 6 : 1)
+    if (specificity <= 2 && matchRatio < 0.45 && !textHint) {
+      score -= 10
+    }
+
+    // 選んだ症状のうち、本症で説明できない割合が大きいと減点（寄せ集め一致を抑制）
+    if (selected.size >= 3) {
+      const unexplained = [...selected].filter((s) => !condition.symptoms.includes(s)).length
+      const unexplainedRatio = unexplained / selected.size
+      if (unexplainedRatio >= 0.6 && specificity <= 3 && !textHint) {
+        score -= unexplainedRatio * 14
+      }
+    }
+
+    if (matchedSymptoms.length === 0 && visualHit && !textHint) {
+      score += visualHit.score * 0.55
+      reasons.push('写真所見からの候補')
     }
 
     if (visualHit) {
@@ -241,12 +332,18 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
 
     if (
       input.durationDays <= 2 &&
-      ['influenza', 'gastroenteritis', 'common_cold', 'covid_like', 'urticaria', 'impetigo'].includes(
+      ['influenza', 'gastroenteritis', 'common_cold', 'covid_like', 'urticaria', 'impetigo', 'strep_pharyngitis'].includes(
         condition.id,
       )
     ) {
       score += 3
       reasons.push('急性経過と一致')
+    }
+
+    // 慢性皮膚・足病変は長い経過を支持
+    if (input.durationDays >= 14 && ['corn_clavus', 'plantar_wart', 'tinea', 'psoriasis', 'plantar_fasciitis'].includes(condition.id)) {
+      score += 6
+      reasons.push('比較的長い経過が本症と一致')
     }
 
     // 発症様式
@@ -274,14 +371,26 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
         score += 7
         reasons.push('突然発症は本症の典型経過に近い')
       }
-      if (['tension_headache', 'ibs', 'psoriasis', 'tinea', 'depression_episode'].includes(condition.id)) {
+      if (['tension_headache', 'ibs', 'psoriasis', 'tinea', 'depression_episode', 'corn_clavus', 'plantar_wart'].includes(condition.id)) {
         score -= 4
       }
     }
     if (onset === 'gradual') {
-      if (['tension_headache', 'gerd', 'ibs', 'dermatitis', 'psoriasis', 'tinea', 'heart_failure', 'ra_flare', 'corn_clavus'].includes(
-          condition.id,
-        )
+      if (
+        [
+          'tension_headache',
+          'gerd',
+          'ibs',
+          'dermatitis',
+          'psoriasis',
+          'tinea',
+          'heart_failure',
+          'ra_flare',
+          'corn_clavus',
+          'plantar_wart',
+          'plantar_fasciitis',
+          'scabies',
+        ].includes(condition.id)
       ) {
         score += 4
         reasons.push('徐々進行と一致しやすい')
@@ -305,6 +414,7 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
           'meningitis_suspect',
           'sepsis_suspect',
           'tonsillitis',
+          'strep_pharyngitis',
           'cholecystitis_suspect',
           'kawasaki_suspect',
         ].includes(condition.id)
@@ -312,13 +422,16 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
         score += feverBand === 'high' ? 8 : 5
         reasons.push('発熱が感染症・炎症疾患を示唆')
       }
-      if (['tension_headache', 'anxiety_disorder', 'gerd', 'acne', 'panic_attack'].includes(condition.id)) {
-        score -= 5
+      if (['tension_headache', 'anxiety_disorder', 'gerd', 'acne', 'panic_attack', 'corn_clavus', 'plantar_wart', 'plantar_fasciitis'].includes(condition.id)) {
+        score -= 8
       }
     }
     if (feverBand === 'none') {
-      if (['influenza', 'cellulitis', 'impetigo', 'sepsis_suspect', 'pyelonephritis'].includes(condition.id)) {
+      if (['influenza', 'cellulitis', 'impetigo', 'sepsis_suspect', 'pyelonephritis', 'strep_pharyngitis'].includes(condition.id)) {
         score -= 4
+      }
+      if (['corn_clavus', 'plantar_wart', 'tension_headache', 'allergic_rhinitis'].includes(condition.id)) {
+        score += 3
       }
     }
 
@@ -464,15 +577,17 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
       'burn_erythema',
       'allergic_contact',
       'corn_clavus',
+      'plantar_wart',
+      'scabies',
     ]
     if (skinRelated.includes(condition.id)) {
-      if (input.skinSensation === 'itchy' && ['dermatitis', 'urticaria', 'tinea', 'allergic_contact', 'psoriasis'].includes(condition.id)) {
-        score += 6
-        reasons.push('かゆみが本症と一致')
-      }
-      if (input.skinSensation === 'painful' && ['herpes_zoster', 'cellulitis', 'burn_erythema', 'impetigo', 'corn_clavus'].includes(condition.id)) {
+      if (input.skinSensation === 'painful' && ['herpes_zoster', 'cellulitis', 'burn_erythema', 'impetigo', 'corn_clavus', 'plantar_wart'].includes(condition.id)) {
         score += 7
         reasons.push('痛みが本症と一致')
+      }
+      if (input.skinSensation === 'itchy' && ['dermatitis', 'urticaria', 'tinea', 'allergic_contact', 'psoriasis', 'scabies'].includes(condition.id)) {
+        score += 6
+        reasons.push('かゆみが本症と一致')
       }
       if (input.skinSensation === 'both' && ['impetigo', 'herpes_zoster', 'cellulitis'].includes(condition.id)) {
         score += 4
@@ -492,9 +607,9 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
         score += 5
         reasons.push('間擦部位は真菌・接触皮膚炎が多い')
       }
-      if (input.skinSite === 'limbs' && condition.id === 'corn_clavus') {
-        score += 8
-        reasons.push('手足の圧迫部位は魚の目・たこと一致しやすい')
+      if (input.skinSite === 'limbs' && ['corn_clavus', 'plantar_wart', 'tinea'].includes(condition.id)) {
+        score += condition.id === 'corn_clavus' || condition.id === 'plantar_wart' ? 8 : 4
+        reasons.push('手足の病変として矛盾しない')
       }
       if (input.skinSite === 'widespread' && condition.id === 'urticaria') {
         score += 5
@@ -559,26 +674,56 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
       }
     }
 
-    score *= urgencyWeight[condition.urgency]
-    score = clamp(score, 0, 100)
+    // 紛らわしい疾患ペア：相手の決め手ワードがある側を優先
+    const rivalGroups: string[][] = [
+      ['corn_clavus', 'plantar_wart', 'plantar_fasciitis'],
+      ['common_cold', 'strep_pharyngitis', 'tonsillitis', 'allergic_rhinitis'],
+      ['migraine', 'tension_headache'],
+      ['uti', 'pyelonephritis', 'urolithiasis'],
+      ['otitis_media', 'otitis_externa'],
+      ['dermatitis', 'scabies', 'urticaria', 'allergic_contact'],
+    ]
+    for (const group of rivalGroups) {
+      if (!group.includes(condition.id)) continue
+      for (const rivalId of group) {
+        if (rivalId === condition.id) continue
+        const rivalKeys = conditionPrecision[rivalId]?.textKeywords
+        if (textMatchesKeywords(freeText, rivalKeys) && !textHint) {
+          score -= 22
+          reasons.push('より特異的な別候補の表現あり')
+        }
+      }
+      if (textHint) score += 8
+    }
+
+    let rankScore = score * urgencyWeight[condition.urgency] + specificity * 1.5
+    if (textHint) rankScore += 12
+    const displayScore = clamp(rankScore, 0, 100)
 
     ranked.push({
       condition,
-      score: Math.round(score * 10) / 10,
+      score: Math.round(displayScore * 10) / 10,
       matchRatio,
       matchedSymptoms,
       reasons,
       visualScore: visualHit ? Math.round(visualHit.score) : undefined,
       specialty: specialtyById[condition.id] ?? '内科',
-      likelihood: toLikelihood(score),
+      likelihood: toLikelihood(displayScore),
       mustNotMiss: mustNotMissIds.has(condition.id) || Boolean(condition.redFlag),
       pearl: condition.pearl ?? clinicalPearlsById[condition.id],
     })
+    rankScores.set(condition.id, rankScore)
   }
 
   return ranked
-    .sort((a, b) => b.score - a.score || b.matchRatio - a.matchRatio)
-    .slice(0, 8)
+    .sort(
+      (a, b) =>
+        (rankScores.get(b.condition.id) ?? b.score) - (rankScores.get(a.condition.id) ?? a.score) ||
+        (conditionPrecision[b.condition.id]?.specificity ?? 2) -
+          (conditionPrecision[a.condition.id]?.specificity ?? 2) ||
+        b.matchRatio - a.matchRatio,
+    )
+    .slice(0, 10)
 }
 
 export function highestUrgency(results: RankedCondition[]): Urgency {
