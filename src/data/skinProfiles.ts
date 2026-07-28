@@ -134,6 +134,17 @@ export const skinVisualProfiles: SkinVisualProfile[] = [
       contrast: { min: 0.25, weight: 0.5 },
     },
   },
+  {
+    conditionId: 'corn_clavus',
+    labelHint: '局所の硬い黄白色〜肌色の肥厚',
+    cues: {
+      yellowness: { min: 0.25, weight: 1.1 },
+      whiteness: { min: 0.2, weight: 0.7 },
+      darkness: { max: 0.45, weight: 0.5 },
+      contrast: { min: 0.2, weight: 0.6 },
+      redness: { max: 0.45, weight: 0.4 },
+    },
+  },
 ]
 
 export function scoreVisualMatch(features: VisualFeatures, profile: SkinVisualProfile): number {

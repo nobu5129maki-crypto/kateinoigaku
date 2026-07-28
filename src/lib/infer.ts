@@ -46,6 +46,7 @@ export interface ProfileInput {
   painQuality?: PainQuality
   contextFlags?: ContextFlagId[]
   doctorQuestions?: string
+  freeText?: string
 }
 
 export interface RankedCondition {
@@ -156,8 +157,9 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
   const courseTrend = input.courseTrend ?? 'unknown'
   const painQuality = input.painQuality ?? 'unknown'
   const flags = new Set(input.contextFlags ?? [])
+  const freeText = (input.freeText ?? '').normalize('NFKC').toLowerCase()
 
-  if (selected.size === 0 && !visual) return []
+  if (selected.size === 0 && !visual && !freeText.trim()) return []
 
   const visualByCondition = new Map<string, { score: number; hint: string }>()
   if (visual) {
@@ -177,8 +179,17 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
 
     const matchedSymptoms = condition.symptoms.filter((s) => selected.has(s))
     const visualHit = visualByCondition.get(condition.id)
+    const textHint =
+      freeText &&
+      (
+        (condition.id === 'corn_clavus' &&
+          ['魚の目', 'うおのめ', 'ウオノメ', '鶏眼', '胼胝', 'たこ', 'タコ'].some((k) =>
+            freeText.includes(k.normalize('NFKC').toLowerCase()),
+          )) ||
+        (condition.id === 'tinea' && ['水虫', 'たむし', '白癬'].some((k) => freeText.includes(k)))
+      )
 
-    if (matchedSymptoms.length === 0 && !visualHit) continue
+    if (matchedSymptoms.length === 0 && !visualHit && !textHint) continue
 
     const matchRatio =
       condition.symptoms.length === 0
@@ -195,6 +206,14 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
     } else if (visualHit) {
       score += visualHit.score * 0.55
       reasons.push('写真所見からの候補')
+    } else if (textHint) {
+      score += 42
+      reasons.push('症状の文章表現から候補')
+    }
+
+    if (textHint && condition.id === 'corn_clavus') {
+      score += 28
+      reasons.push('「魚の目・たこ」など典型表現あり')
     }
 
     if (visualHit) {
@@ -260,8 +279,7 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
       }
     }
     if (onset === 'gradual') {
-      if (
-        ['tension_headache', 'gerd', 'ibs', 'dermatitis', 'psoriasis', 'tinea', 'heart_failure', 'ra_flare'].includes(
+      if (['tension_headache', 'gerd', 'ibs', 'dermatitis', 'psoriasis', 'tinea', 'heart_failure', 'ra_flare', 'corn_clavus'].includes(
           condition.id,
         )
       ) {
@@ -445,13 +463,14 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
       'pigmented_lesion',
       'burn_erythema',
       'allergic_contact',
+      'corn_clavus',
     ]
     if (skinRelated.includes(condition.id)) {
       if (input.skinSensation === 'itchy' && ['dermatitis', 'urticaria', 'tinea', 'allergic_contact', 'psoriasis'].includes(condition.id)) {
         score += 6
         reasons.push('かゆみが本症と一致')
       }
-      if (input.skinSensation === 'painful' && ['herpes_zoster', 'cellulitis', 'burn_erythema', 'impetigo'].includes(condition.id)) {
+      if (input.skinSensation === 'painful' && ['herpes_zoster', 'cellulitis', 'burn_erythema', 'impetigo', 'corn_clavus'].includes(condition.id)) {
         score += 7
         reasons.push('痛みが本症と一致')
       }
@@ -472,6 +491,10 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
       if (input.skinSite === 'groin' && ['tinea', 'allergic_contact'].includes(condition.id)) {
         score += 5
         reasons.push('間擦部位は真菌・接触皮膚炎が多い')
+      }
+      if (input.skinSite === 'limbs' && condition.id === 'corn_clavus') {
+        score += 8
+        reasons.push('手足の圧迫部位は魚の目・たこと一致しやすい')
       }
       if (input.skinSite === 'widespread' && condition.id === 'urticaria') {
         score += 5

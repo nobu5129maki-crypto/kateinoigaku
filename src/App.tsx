@@ -112,6 +112,7 @@ function App() {
       painQuality,
       contextFlags,
       doctorQuestions,
+      freeText: symptomText,
     })
   }, [
     step,
@@ -133,6 +134,7 @@ function App() {
     painQuality,
     contextFlags,
     doctorQuestions,
+    symptomText,
   ])
 
   const urgency = highestUrgency(results)
@@ -157,6 +159,7 @@ function App() {
         painQuality,
         contextFlags,
         doctorQuestions,
+        freeText: symptomText,
       }),
     [
       results,
@@ -179,6 +182,7 @@ function App() {
       painQuality,
       contextFlags,
       doctorQuestions,
+      symptomText,
     ],
   )
   const dispositionText = dispositionCopy(disposition)

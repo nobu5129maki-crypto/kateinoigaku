@@ -184,6 +184,7 @@ export const specialtyById: Record<string, string> = {
   pigmented_lesion: '皮膚科',
   burn_erythema: '皮膚科・形成外科・救急',
   allergic_contact: '皮膚科',
+  corn_clavus: '皮膚科・フットケア',
   menstrual_cramps: '婦人科',
   covid_like: '内科',
   appendicitis_suspect: '救急・外科',
