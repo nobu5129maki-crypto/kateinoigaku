@@ -32,6 +32,7 @@ import {
   resolveDisposition,
 } from './lib/infer'
 import type { ImageAnalysisResult } from './lib/imageAnalysis'
+import { parseSymptomsFromText } from './lib/parseSymptoms'
 import './App.css'
 
 type Step =
@@ -59,6 +60,7 @@ function App() {
   const [mode, setMode] = useState<Mode>('standard')
   const [age, setAge] = useState(35)
   const [sex, setSex] = useState<Sex>('female')
+  const [symptomText, setSymptomText] = useState('')
   const [selectedSymptoms, setSelectedSymptoms] = useState<SymptomId[]>([])
   const [history, setHistory] = useState<HistoryId[]>([])
   const [durationDays, setDurationDays] = useState(2)
@@ -170,10 +172,19 @@ function App() {
           .join(' / ')
       : undefined
 
+    const symptomLabels = selectedSymptoms.map(
+      (id) => symptoms.find((s) => s.id === id)?.label ?? id,
+    )
+
     return buildVisitSummary({
       age,
       sexLabel,
-      symptoms: selectedSymptoms.map((id) => symptoms.find((s) => s.id === id)?.label ?? id),
+      symptoms: symptomText.trim()
+        ? [
+            symptomText.trim() +
+              (symptomLabels.length ? `（${symptomLabels.join('、')}）` : ''),
+          ]
+        : symptomLabels,
       history: history
         .filter((h) => h !== 'none')
         .map((id) => historyOptions.find((h) => h.id === id)?.label ?? id),
@@ -190,6 +201,7 @@ function App() {
   }, [
     age,
     sexLabel,
+    symptomText,
     selectedSymptoms,
     history,
     durationDays,
@@ -211,6 +223,13 @@ function App() {
     setSelectedSymptoms((prev) =>
       prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id],
     )
+  }
+
+  function onSymptomTextChange(value: string) {
+    setSymptomText(value)
+    const parsed = parseSymptomsFromText(value)
+    if (parsed.length === 0) return
+    setSelectedSymptoms((prev) => [...new Set([...prev, ...parsed])])
   }
 
   function toggleHistory(id: HistoryId) {
@@ -261,6 +280,7 @@ function App() {
     clearPhoto()
     setStep('landing')
     setMode('standard')
+    setSymptomText('')
     setSelectedSymptoms([])
     setHistory([])
     setDurationDays(2)
@@ -297,7 +317,8 @@ function App() {
   const visibleRedFlags =
     age < 5 ? redFlags : redFlags.filter((f) => f.id !== 'infant_lethargy')
 
-  const canProceedFromSymptoms = selectedSymptoms.length > 0 || Boolean(imageAnalysis)
+  const canProceedFromSymptoms =
+    symptomText.trim().length > 0 || selectedSymptoms.length > 0 || Boolean(imageAnalysis)
 
   return (
     <div className="app">
@@ -557,36 +578,83 @@ function App() {
               title="いまの症状は？"
               subtitle={
                 mode === 'camera'
-                  ? '写真から推定した症状を先に入れています。足りないものも選んでください。'
-                  : '当てはまるものをすべて選んでください。複数選択できます。'
+                  ? '写真から推定した症状を先に入れています。文章でも詳しく書いてください。'
+                  : 'いつから、どこが、どうつらいかを文章で書いてください。キーワードから症状を自動で拾います。'
               }
               onBack={() => setStep(mode === 'camera' ? 'photo' : 'triage')}
               onNext={() => setStep(mode === 'camera' ? 'history' : 'photo')}
               nextDisabled={!canProceedFromSymptoms}
               nextLabel={mode === 'camera' ? '次へ：病歴を選ぶ' : '次へ：写真（任意）'}
             >
-              <div className="symptom-board">
-                {categories.map((cat) => (
-                  <div key={cat} className="symptom-group">
-                    <h3>{cat}</h3>
-                    <div className="chip-row wrap">
-                      {symptoms
-                        .filter((s) => s.category === cat)
-                        .map((s) => (
-                          <button
-                            key={s.id}
-                            type="button"
-                            className={`chip ${selectedSymptoms.includes(s.id) ? 'is-on' : ''}`}
-                            onClick={() => toggleSymptom(s.id)}
-                          >
-                            {s.label}
-                          </button>
-                        ))}
-                    </div>
+              <label className="field symptom-text-field">
+                <span className="field-label">症状を文章で書く</span>
+                <textarea
+                  className="symptom-textarea"
+                  value={symptomText}
+                  onChange={(e) => onSymptomTextChange(e.target.value)}
+                  rows={5}
+                  placeholder="例）昨日の夕方から熱っぽく、のどが痛くて咳が出ます。少しだるさもあり、食欲はあまりありません。"
+                  autoComplete="off"
+                />
+              </label>
+
+              {selectedSymptoms.length > 0 && (
+                <div className="detected-symptoms">
+                  <p className="field-label">拾えた症状（不要なら外してください）</p>
+                  <div className="chip-row wrap">
+                    {selectedSymptoms.map((id) => {
+                      const label = symptoms.find((s) => s.id === id)?.label ?? id
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          className="chip is-on"
+                          onClick={() => toggleSymptom(id)}
+                        >
+                          {label} ×
+                        </button>
+                      )
+                    })}
                   </div>
-                ))}
-              </div>
-              <p className="selection-count">選択中 {selectedSymptoms.length} 件</p>
+                </div>
+              )}
+
+              {symptomText.trim().length > 0 && selectedSymptoms.length === 0 && (
+                <p className="symptom-hint">
+                  まだ症状を拾えていません。下の一覧から選ぶか、発熱・咳・腹痛など具体的な言葉を入れてください。
+                </p>
+              )}
+
+              <details className="symptom-picker">
+                <summary>一覧から追加で選ぶ</summary>
+                <div className="symptom-board">
+                  {categories.map((cat) => (
+                    <div key={cat} className="symptom-group">
+                      <h3>{cat}</h3>
+                      <div className="chip-row wrap">
+                        {symptoms
+                          .filter((s) => s.category === cat)
+                          .map((s) => (
+                            <button
+                              key={s.id}
+                              type="button"
+                              className={`chip ${selectedSymptoms.includes(s.id) ? 'is-on' : ''}`}
+                              onClick={() => toggleSymptom(s.id)}
+                            >
+                              {s.label}
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+              <p className="selection-count">
+                {symptomText.trim()
+                  ? `文章 ${symptomText.trim().length} 文字`
+                  : '文章未入力'}
+                {selectedSymptoms.length > 0 ? ` ・整理 ${selectedSymptoms.length} 件` : ''}
+              </p>
             </WizardFrame>
           )}
 
@@ -846,6 +914,9 @@ function App() {
                   {imageAnalysis ? '・写真解析あり' : ''}
                   。確定診断ではなく、診察前の整理です。
                 </p>
+                {symptomText.trim() && (
+                  <blockquote className="complaint-quote">「{symptomText.trim()}」</blockquote>
+                )}
               </div>
 
               {results.length === 0 ? (
