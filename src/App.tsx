@@ -15,6 +15,15 @@ import {
   type SkinSite,
 } from './data/clinical'
 import {
+  contextFlagOptions,
+  contextGroups,
+  courseTrendOptions,
+  painQualityOptions,
+  type ContextFlagId,
+  type CourseTrend,
+  type PainQuality,
+} from './data/clinicalQuestions'
+import {
   historyOptions,
   symptoms,
   type HistoryId,
@@ -74,6 +83,10 @@ function App() {
   const [skinSensation, setSkinSensation] = useState<SkinSensation>('neither')
   const [skinSpreading, setSkinSpreading] = useState(false)
   const [skinBlisters, setSkinBlisters] = useState(false)
+  const [courseTrend, setCourseTrend] = useState<CourseTrend>('unknown')
+  const [painQuality, setPainQuality] = useState<PainQuality>('unknown')
+  const [contextFlags, setContextFlags] = useState<ContextFlagId[]>([])
+  const [doctorQuestions, setDoctorQuestions] = useState('')
   const [copied, setCopied] = useState(false)
 
   const triage = useMemo(() => evaluateTriage(redFlagIds, age), [redFlagIds, age])
@@ -95,6 +108,10 @@ function App() {
       skinSensation,
       skinSpreading,
       skinBlisters,
+      courseTrend,
+      painQuality,
+      contextFlags,
+      doctorQuestions,
     })
   }, [
     step,
@@ -112,6 +129,10 @@ function App() {
     skinSensation,
     skinSpreading,
     skinBlisters,
+    courseTrend,
+    painQuality,
+    contextFlags,
+    doctorQuestions,
   ])
 
   const urgency = highestUrgency(results)
@@ -132,6 +153,10 @@ function App() {
         skinSensation,
         skinSpreading,
         skinBlisters,
+        courseTrend,
+        painQuality,
+        contextFlags,
+        doctorQuestions,
       }),
     [
       results,
@@ -150,6 +175,10 @@ function App() {
       skinSensation,
       skinSpreading,
       skinBlisters,
+      courseTrend,
+      painQuality,
+      contextFlags,
+      doctorQuestions,
     ],
   )
   const dispositionText = dispositionCopy(disposition)
@@ -197,6 +226,12 @@ function App() {
       dispositionTitle: dispositionText.title,
       photoFindings: imageAnalysis?.findings.map((f) => f.label),
       skinNote,
+      courseTrend: courseTrendOptions.find((c) => c.id === courseTrend)?.label,
+      painQuality: painQualityOptions.find((p) => p.id === painQuality)?.label,
+      contextNotes: contextFlags.map(
+        (id) => contextFlagOptions.find((c) => c.id === id)?.label ?? id,
+      ),
+      doctorQuestions,
     })
   }, [
     age,
@@ -217,6 +252,10 @@ function App() {
     skinSensation,
     skinSpreading,
     skinBlisters,
+    courseTrend,
+    painQuality,
+    contextFlags,
+    doctorQuestions,
   ])
 
   function toggleSymptom(id: SymptomId) {
@@ -247,6 +286,10 @@ function App() {
 
   function toggleRedFlag(id: RedFlagId) {
     setRedFlagIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  function toggleContextFlag(id: ContextFlagId) {
+    setContextFlags((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
 
   function clearPhoto() {
@@ -292,6 +335,10 @@ function App() {
     setSkinSensation('neither')
     setSkinSpreading(false)
     setSkinBlisters(false)
+    setCourseTrend('unknown')
+    setPainQuality('unknown')
+    setContextFlags([])
+    setDoctorQuestions('')
     setCopied(false)
   }
 
@@ -319,6 +366,27 @@ function App() {
 
   const canProceedFromSymptoms =
     symptomText.trim().length > 0 || selectedSymptoms.length > 0 || Boolean(imageAnalysis)
+
+  const showPainQuestions = selectedSymptoms.some((s) =>
+    [
+      'headache',
+      'chest_pain',
+      'abdominal_pain',
+      'back_pain',
+      'joint_pain',
+      'muscle_pain',
+      'ear_pain',
+      'eye_pain',
+      'sore_throat',
+      'urinary_pain',
+      'flank_pain',
+      'neck_pain',
+      'calf_pain',
+      'tooth_pain',
+      'testicular_pain',
+      'menstrual_pain',
+    ].includes(s),
+  )
 
   return (
     <div className="app">
@@ -374,7 +442,7 @@ function App() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.35 }}
                 >
-                  危険兆候の確認から、症状・写真・経過まで。受診の優先度と鑑別の手がかりを整理します。
+                  危険兆候の確認から、全科の専門知見に基づく症状・写真・経過・質問まで。受診の優先度と鑑別の手がかりを整理します。
                 </motion.p>
                 <motion.div
                   className="hero-actions"
@@ -691,7 +759,7 @@ function App() {
               stepIndex={5}
               totalSteps={6}
               title="病歴・体質はありますか？"
-              subtitle="心疾患・糖尿病・妊娠などは、同じ症状でも受診の緊急度が上がります。"
+              subtitle="心疾患・糖尿病・COPD・血栓・免疫抑制・妊娠などは、同じ症状でも緊急度と鑑別が変わります。"
               onBack={() => setStep(mode === 'camera' ? 'symptoms' : 'photo')}
               onNext={() => setStep('detail')}
               nextLabel="次へ：経過の詳細"
@@ -716,8 +784,8 @@ function App() {
               key="detail"
               stepIndex={6}
               totalSteps={6}
-              title="経過を医師が聞く順で"
-              subtitle="発症の仕方・熱・皮膚の性状は、鑑別を大きく変えます。"
+              title="スーパードクター問診"
+              subtitle="発症・熱・経過に加え、痛みの性状・誘因・要注意サイン、そして医師への質問を整理します。"
               onBack={() => setStep('history')}
               onNext={() => setStep('result')}
               nextLabel="鑑別と受診方針を見る"
@@ -748,6 +816,22 @@ function App() {
                         type="button"
                         className={`chip ${feverBand === opt.id ? 'is-on' : ''}`}
                         onClick={() => setFeverBand(opt.id)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+
+                <fieldset className="field">
+                  <legend className="field-label">ここ数日の勢い（経過）</legend>
+                  <div className="chip-row wrap">
+                    {courseTrendOptions.map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        className={`chip ${courseTrend === opt.id ? 'is-on' : ''}`}
+                        onClick={() => setCourseTrend(opt.id)}
                       >
                         {opt.label}
                       </button>
@@ -786,6 +870,47 @@ function App() {
                     ))}
                   </div>
                 </fieldset>
+
+                {showPainQuestions && (
+                  <fieldset className="field">
+                    <legend className="field-label">痛みの感じ方（専門医が必ず聞く）</legend>
+                    <div className="chip-row wrap">
+                      {painQualityOptions.map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          className={`chip ${painQuality === opt.id ? 'is-on' : ''}`}
+                          onClick={() => setPainQuality(opt.id)}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                )}
+
+                <div className="field clinical-questions">
+                  <p className="field-label">きっかけ・誘因・要注意サイン（当てはまるもの）</p>
+                  {contextGroups.map((group) => (
+                    <div key={group} className="context-group">
+                      <h3 className="context-group-title">{group}</h3>
+                      <div className="chip-row wrap">
+                        {contextFlagOptions
+                          .filter((opt) => opt.group === group)
+                          .map((opt) => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              className={`chip ${contextFlags.includes(opt.id) ? 'is-on' : ''} ${group === '要注意' ? 'chip-warn' : ''}`}
+                              onClick={() => toggleContextFlag(opt.id)}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
                 {showSkinQuestions && (
                   <>
@@ -839,6 +964,17 @@ function App() {
                     </div>
                   </>
                 )}
+
+                <label className="field">
+                  <span className="field-label">医師への質問・伝えたいこと</span>
+                  <textarea
+                    className="symptom-textarea doctor-questions"
+                    value={doctorQuestions}
+                    onChange={(e) => setDoctorQuestions(e.target.value)}
+                    rows={4}
+                    placeholder="例）仕事は休んだ方がいいですか？／市販薬は何がよいですか？／検査は必要ですか？／再診の目安は？"
+                  />
+                </label>
               </div>
             </WizardFrame>
           )}
@@ -956,6 +1092,12 @@ function App() {
                         </div>
                         <p className="specialty-line">受診科の目安：{r.specialty}</p>
                         <p className="result-summary">{r.condition.summary}</p>
+                        {r.pearl && (
+                          <p className="clinical-pearl">
+                            <strong>専門医の視点</strong>
+                            {r.pearl}
+                          </p>
+                        )}
                         <ul className="reason-list">
                           {r.reasons.map((reason) => (
                             <li key={reason}>{reason}</li>
@@ -993,6 +1135,13 @@ function App() {
                   ))}
                 </ul>
               </section>
+
+              {doctorQuestions.trim() && (
+                <section className="clinical-block">
+                  <h3>あなたが医師に聞きたいこと</h3>
+                  <p className="doctor-q-preview">{doctorQuestions.trim()}</p>
+                </section>
+              )}
 
               <section className="clinical-block summary-block">
                 <div className="summary-head">

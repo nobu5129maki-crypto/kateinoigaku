@@ -1,3 +1,5 @@
+import { specialtyConditions } from './specialtyConditions'
+
 export type Sex = 'male' | 'female' | 'other'
 export type AgeGroup = 'infant' | 'child' | 'teen' | 'adult' | 'senior'
 export type Urgency = 'emergency' | 'urgent' | 'soon' | 'home'
@@ -38,6 +40,25 @@ export type SymptomId =
   | 'insomnia'
   | 'menstrual_pain'
   | 'vaginal_discharge'
+  | 'numbness'
+  | 'neck_pain'
+  | 'flank_pain'
+  | 'calf_pain'
+  | 'wheezing'
+  | 'syncope'
+  | 'confusion'
+  | 'hearing_loss'
+  | 'tinnitus'
+  | 'difficulty_swallowing'
+  | 'hoarseness'
+  | 'loss_of_smell'
+  | 'jaundice'
+  | 'thirst'
+  | 'tremor'
+  | 'depression_mood'
+  | 'tooth_pain'
+  | 'vaginal_bleeding'
+  | 'testicular_pain'
 
 export type HistoryId =
   | 'hypertension'
@@ -51,6 +72,17 @@ export type HistoryId =
   | 'pregnancy'
   | 'smoking'
   | 'none'
+  | 'copd'
+  | 'stroke'
+  | 'kidney_disease'
+  | 'cancer'
+  | 'epilepsy'
+  | 'thyroid'
+  | 'autoimmune'
+  | 'anticoagulant'
+  | 'immunosuppressed'
+  | 'alcohol_heavy'
+  | 'dvt_pe_history'
 
 export interface Symptom {
   id: SymptomId
@@ -62,6 +94,8 @@ export interface Condition {
   id: string
   name: string
   summary: string
+  /** スーパードクター視点の臨床パール（鑑別・見逃し防止） */
+  pearl?: string
   symptoms: SymptomId[]
   ages?: AgeGroup[]
   sexes?: Sex[]
@@ -108,6 +142,25 @@ export const symptoms: Symptom[] = [
   { id: 'ear_pain', label: '耳の痛み', category: '感覚器' },
   { id: 'menstrual_pain', label: '生理痛が強い', category: '婦人科' },
   { id: 'vaginal_discharge', label: 'おりものの異常', category: '婦人科' },
+  { id: 'vaginal_bleeding', label: '不正出血', category: '婦人科' },
+  { id: 'numbness', label: 'しびれ・麻痺感', category: '頭・神経' },
+  { id: 'confusion', label: '意識がはっきりしない', category: '頭・神経' },
+  { id: 'syncope', label: '失神・気を失いそう', category: '頭・神経' },
+  { id: 'tremor', label: 'ふるえ', category: '頭・神経' },
+  { id: 'depression_mood', label: '気分の落ち込み', category: '頭・神経' },
+  { id: 'neck_pain', label: '首の痛み', category: '筋骨格' },
+  { id: 'flank_pain', label: 'わき腹・側腹部の痛み', category: '泌尿器' },
+  { id: 'calf_pain', label: 'ふくらはぎの痛み', category: '循環器' },
+  { id: 'wheezing', label: 'ぜん鳴（ゼーゼー）', category: '呼吸器' },
+  { id: 'hearing_loss', label: '聞こえにくさ', category: '感覚器' },
+  { id: 'tinnitus', label: '耳鳴り', category: '感覚器' },
+  { id: 'difficulty_swallowing', label: '飲み込みにくい', category: '呼吸器' },
+  { id: 'hoarseness', label: '声のかすれ', category: '呼吸器' },
+  { id: 'loss_of_smell', label: 'においがわからない', category: '呼吸器' },
+  { id: 'jaundice', label: '皮膚や目が黄色い', category: '消化器' },
+  { id: 'thirst', label: '強い口渇', category: '全身' },
+  { id: 'tooth_pain', label: '歯の痛み', category: '感覚器' },
+  { id: 'testicular_pain', label: '陰嚢・睾丸の痛み', category: '泌尿器' },
 ]
 
 export const historyOptions: { id: HistoryId; label: string }[] = [
@@ -115,16 +168,27 @@ export const historyOptions: { id: HistoryId; label: string }[] = [
   { id: 'hypertension', label: '高血圧' },
   { id: 'diabetes', label: '糖尿病' },
   { id: 'asthma', label: '喘息・アレルギー性気道疾患' },
+  { id: 'copd', label: 'COPD・慢性の肺の病気' },
   { id: 'heart_disease', label: '心臓病' },
+  { id: 'stroke', label: '脳卒中・TIAの既往' },
+  { id: 'kidney_disease', label: '腎臓病' },
+  { id: 'thyroid', label: '甲状腺の病気' },
+  { id: 'autoimmune', label: '自己免疫疾患' },
+  { id: 'cancer', label: 'がんの既往・治療中' },
+  { id: 'epilepsy', label: 'てんかん' },
   { id: 'allergy', label: 'アレルギー体質' },
   { id: 'migraine', label: '片頭痛' },
   { id: 'ibs', label: '過敏性腸症候群' },
   { id: 'depression', label: 'うつ・不安の既往' },
+  { id: 'dvt_pe_history', label: '血栓症（DVT/PE）の既往' },
+  { id: 'anticoagulant', label: '血液をサラサラにする薬' },
+  { id: 'immunosuppressed', label: '免疫抑制・ステロイド常用' },
   { id: 'pregnancy', label: '妊娠中・可能性あり' },
   { id: 'smoking', label: '喫煙習慣' },
+  { id: 'alcohol_heavy', label: '飲酒量が多い' },
 ]
 
-export const conditions: Condition[] = [
+export const coreConditions: Condition[] = [
   {
     id: 'common_cold',
     name: 'かぜ（急性上気道炎）',
@@ -495,3 +559,5 @@ export const conditions: Condition[] = [
     seeDoctorWhen: ['意識がはっきりしない', '吐き気が強い', '急な体重変化'],
   },
 ]
+
+export const conditions: Condition[] = [...coreConditions, ...specialtyConditions]

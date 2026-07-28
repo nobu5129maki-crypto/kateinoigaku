@@ -1,6 +1,7 @@
 import {
   mustNotMissIds,
   specialtyById,
+  clinicalPearlsById,
   type FeverBand,
   type OnsetType,
   type RedFlag,
@@ -9,6 +10,11 @@ import {
   type SkinSite,
   redFlags,
 } from '../data/clinical'
+import {
+  type CourseTrend,
+  type ContextFlagId,
+  type PainQuality,
+} from '../data/clinicalQuestions'
 import {
   type AgeGroup,
   type Condition,
@@ -36,6 +42,10 @@ export interface ProfileInput {
   skinSensation?: SkinSensation
   skinSpreading?: boolean
   skinBlisters?: boolean
+  courseTrend?: CourseTrend
+  painQuality?: PainQuality
+  contextFlags?: ContextFlagId[]
+  doctorQuestions?: string
 }
 
 export interface RankedCondition {
@@ -48,6 +58,7 @@ export interface RankedCondition {
   specialty: string
   likelihood: 'high' | 'moderate' | 'low'
   mustNotMiss: boolean
+  pearl?: string
 }
 
 export type Disposition =
@@ -104,6 +115,8 @@ export function evaluateTriage(flagIds: RedFlagId[], age: number): TriageResult 
       'anaphylaxis',
       'severe_bleeding',
       'seizure',
+      'testicular_acute_pain',
+      'sudden_vision_loss',
     ].includes(f.id),
   )
 
@@ -140,6 +153,9 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
   const visual = input.imageAnalysis
   const onset = input.onset ?? 'unclear'
   const feverBand = input.feverBand ?? 'unknown'
+  const courseTrend = input.courseTrend ?? 'unknown'
+  const painQuality = input.painQuality ?? 'unknown'
+  const flags = new Set(input.contextFlags ?? [])
 
   if (selected.size === 0 && !visual) return []
 
@@ -216,16 +232,39 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
 
     // 発症様式
     if (onset === 'sudden') {
-      if (['angina_acs', 'appendicitis_suspect', 'urticaria', 'migraine', 'stroke_like'].includes(condition.id)) {
+      if (
+        [
+          'angina_acs',
+          'appendicitis_suspect',
+          'urticaria',
+          'migraine',
+          'stroke_tia',
+          'pneumothorax_suspect',
+          'pe_suspect',
+          'urolithiasis',
+          'testicular_torsion',
+          'ectopic_pregnancy',
+          'ovarian_torsion_suspect',
+          'sudden_hearing_loss',
+          'acute_glaucoma',
+          'retinal_detachment_suspect',
+          'panic_attack',
+          'gout_attack',
+        ].includes(condition.id)
+      ) {
         score += 7
         reasons.push('突然発症は本症の典型経過に近い')
       }
-      if (['tension_headache', 'ibs', 'psoriasis', 'tinea'].includes(condition.id)) {
+      if (['tension_headache', 'ibs', 'psoriasis', 'tinea', 'depression_episode'].includes(condition.id)) {
         score -= 4
       }
     }
     if (onset === 'gradual') {
-      if (['tension_headache', 'gerd', 'ibs', 'dermatitis', 'psoriasis', 'tinea'].includes(condition.id)) {
+      if (
+        ['tension_headache', 'gerd', 'ibs', 'dermatitis', 'psoriasis', 'tinea', 'heart_failure', 'ra_flare'].includes(
+          condition.id,
+        )
+      ) {
         score += 4
         reasons.push('徐々進行と一致しやすい')
       }
@@ -243,19 +282,153 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
           'impetigo',
           'otitis_media',
           'appendicitis_suspect',
+          'pneumonia_suspect',
+          'pyelonephritis',
+          'meningitis_suspect',
+          'sepsis_suspect',
+          'tonsillitis',
+          'cholecystitis_suspect',
+          'kawasaki_suspect',
         ].includes(condition.id)
       ) {
         score += feverBand === 'high' ? 8 : 5
         reasons.push('発熱が感染症・炎症疾患を示唆')
       }
-      if (['tension_headache', 'anxiety_disorder', 'gerd', 'acne'].includes(condition.id)) {
+      if (['tension_headache', 'anxiety_disorder', 'gerd', 'acne', 'panic_attack'].includes(condition.id)) {
         score -= 5
       }
     }
     if (feverBand === 'none') {
-      if (['influenza', 'cellulitis', 'impetigo'].includes(condition.id)) {
+      if (['influenza', 'cellulitis', 'impetigo', 'sepsis_suspect', 'pyelonephritis'].includes(condition.id)) {
         score -= 4
       }
+    }
+
+    // 経過トレンド
+    if (courseTrend === 'worsening') {
+      if (condition.urgency === 'urgent' || condition.urgency === 'emergency' || condition.redFlag) {
+        score += 5
+        reasons.push('悪化傾向は要除外疾患を優先')
+      }
+    }
+    if (courseTrend === 'improving' && condition.urgency === 'home') {
+      score += 3
+    }
+
+    // 痛みの性状
+    if (painQuality === 'pressure' || painQuality === 'tight') {
+      if (condition.id === 'angina_acs') {
+        score += 8
+        reasons.push('圧迫・締めつけは虚血を示唆')
+      }
+      if (condition.id === 'tension_headache' && selected.has('headache')) {
+        score += 4
+      }
+    }
+    if (painQuality === 'throbbing' && condition.id === 'migraine') {
+      score += 6
+      reasons.push('拍動性頭痛は片頭痛らしい')
+    }
+    if (painQuality === 'burning' && ['gerd', 'peptic_ulcer', 'herpes_zoster'].includes(condition.id)) {
+      score += 5
+      reasons.push('灼熱感が本症と一致しやすい')
+    }
+    if (painQuality === 'sharp' && ['pneumothorax_suspect', 'urolithiasis', 'fracture_suspect'].includes(condition.id)) {
+      score += 4
+    }
+
+    // コンテキストフラグ（スーパードクター問診）
+    if (flags.has('cold_sweat') || flags.has('radiation_arm_jaw') || flags.has('on_exertion')) {
+      if (condition.id === 'angina_acs') {
+        score += 10
+        reasons.push('冷汗・放散・労作誘発はACSを強く示唆')
+      }
+    }
+    if (flags.has('at_rest') && condition.id === 'angina_acs' && selected.has('chest_pain')) {
+      score += 4
+      reasons.push('安静時胸痛は不安定性を意識')
+    }
+    if (flags.has('cannot_lie_flat') && condition.id === 'heart_failure') {
+      score += 10
+      reasons.push('起座呼吸は心不全を強く示唆')
+    }
+    if (flags.has('one_sided_leg_swelling')) {
+      if (condition.id === 'dvt_suspect' || condition.id === 'pe_suspect') {
+        score += 10
+        reasons.push('片側下肢腫脹は血栓症を優先')
+      }
+    }
+    if (flags.has('worst_headache') || flags.has('photophobia') || flags.has('neck_stiffness')) {
+      if (['meningitis_suspect', 'stroke_tia', 'migraine'].includes(condition.id)) {
+        score += condition.id === 'migraine' ? 3 : 9
+        reasons.push('最悪頭痛・項部硬直・光過敏は二次性頭痛を警戒')
+      }
+    }
+    if (flags.has('speech_change') || flags.has('leg_weakness')) {
+      if (condition.id === 'stroke_tia') {
+        score += 12
+        reasons.push('言語・麻痺の変化は脳卒中を最優先')
+      }
+    }
+    if (flags.has('blood_stool') && ['peptic_ulcer', 'ibd_flare', 'gastroenteritis'].includes(condition.id)) {
+      score += 7
+      reasons.push('血便は消化管出血・炎症を示唆')
+    }
+    if (flags.has('blood_urine') && ['urolithiasis', 'uti', 'pyelonephritis'].includes(condition.id)) {
+      score += 6
+      reasons.push('血尿が尿路疾患を支持')
+    }
+    if (flags.has('blood_sputum') && ['pneumonia_suspect', 'pe_suspect', 'acute_bronchitis'].includes(condition.id)) {
+      score += 6
+      reasons.push('血痰は精査が必要')
+    }
+    if (flags.has('after_meal') && ['cholecystitis_suspect', 'gerd', 'peptic_ulcer', 'pancreatitis_suspect'].includes(condition.id)) {
+      score += 5
+      reasons.push('食後悪化が消化器疾患を支持')
+    }
+    if (flags.has('on_exertion') && ['angina_acs', 'heart_failure', 'anemia_suspect'].includes(condition.id)) {
+      score += 4
+    }
+    if (flags.has('at_night') && ['asthma_attack', 'gerd', 'gout_attack', 'croup_suspect'].includes(condition.id)) {
+      score += 4
+      reasons.push('夜間悪化が本症と一致しやすい')
+    }
+    if (flags.has('sick_contact') && ['influenza', 'covid_like', 'gastroenteritis', 'common_cold'].includes(condition.id)) {
+      score += 5
+      reasons.push('周囲の流行・接触歴あり')
+    }
+    if (flags.has('travel') && ['pe_suspect', 'dvt_suspect', 'covid_like'].includes(condition.id)) {
+      score += 6
+      reasons.push('長時間移動は血栓・感染リスク')
+    }
+    if (flags.has('injury') && ['fracture_suspect', 'bruise', 'sciatica'].includes(condition.id)) {
+      score += 7
+      reasons.push('外傷歴が支持')
+    }
+    if (flags.has('new_medication') && ['urticaria', 'allergic_contact', 'hepatitis_suspect'].includes(condition.id)) {
+      score += 5
+      reasons.push('新規薬剤は発疹・肝障害の手がかり')
+    }
+    if (flags.has('alcohol') && ['pancreatitis_suspect', 'hepatitis_suspect', 'gout_attack', 'afib_suspect'].includes(condition.id)) {
+      score += 5
+      reasons.push('飲酒との関連が疑われる')
+    }
+    if (flags.has('fasting_or_skipped_meal') && condition.id === 'hypoglycemia') {
+      score += 8
+      reasons.push('食事抜けは低血糖を支持')
+    }
+    if (flags.has('pregnancy_possible')) {
+      if (['ectopic_pregnancy', 'ovarian_torsion_suspect', 'uti', 'pyelonephritis', 'pe_suspect'].includes(condition.id)) {
+        score += 8
+        reasons.push('妊娠関連の緊急疾患を優先除外')
+      }
+    }
+    if (flags.has('urine_retention') && ['sciatica', 'urolithiasis'].includes(condition.id)) {
+      score += 8
+      reasons.push('尿閉は神経・閉塞の緊急サイン')
+    }
+    if (flags.has('stress') && ['anxiety_disorder', 'panic_attack', 'tension_headache', 'ibs', 'depression_episode'].includes(condition.id)) {
+      score += 4
     }
 
     // 皮膚問診
@@ -316,15 +489,19 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
         score += 8
         reasons.push('高齢＋胸痛は虚血を優先除外')
       }
+      if (selected.has('confusion') && ['stroke_tia', 'sepsis_suspect', 'hypoglycemia', 'pneumonia_suspect'].includes(condition.id)) {
+        score += 5
+        reasons.push('高齢者の意識変化は重症疾患を広く疑う')
+      }
     }
     if ((ageGroup === 'infant' || ageGroup === 'child') && (feverBand === 'high' || feverBand === 'moderate')) {
-      if (['otitis_media', 'impetigo', 'gastroenteritis', 'influenza'].includes(condition.id)) {
+      if (['otitis_media', 'impetigo', 'gastroenteritis', 'influenza', 'kawasaki_suspect', 'croup_suspect'].includes(condition.id)) {
         score += 4
         reasons.push('小児の発熱では感染源検索が重要')
       }
     }
 
-    if (history.has('pregnancy') && ['uti', 'gastroenteritis', 'influenza', 'dehydration'].includes(condition.id)) {
+    if (history.has('pregnancy') && ['uti', 'gastroenteritis', 'influenza', 'dehydration', 'ectopic_pregnancy', 'pe_suspect', 'pyelonephritis'].includes(condition.id)) {
       score += 5
       reasons.push('妊娠中は閾値を下げて受診')
     }
@@ -334,6 +511,22 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
         score += 8
         reasons.push('動脈硬化リスク因子あり')
       }
+    }
+
+    if (history.has('copd') && ['copd_exacerbation', 'pneumonia_suspect'].includes(condition.id)) {
+      score += 6
+      reasons.push('COPD既往が増悪リスク')
+    }
+    if (history.has('dvt_pe_history') && ['pe_suspect', 'dvt_suspect'].includes(condition.id)) {
+      score += 8
+      reasons.push('血栓既往は再発を警戒')
+    }
+    if (history.has('stroke') && condition.id === 'stroke_tia') {
+      score += 6
+    }
+    if (history.has('immunosuppressed') && ['sepsis_suspect', 'pneumonia_suspect', 'cellulitis'].includes(condition.id)) {
+      score += 6
+      reasons.push('免疫低下では重症感染を広く疑う')
     }
 
     if (visual && visualHit && visualHit.score >= 60) {
@@ -356,12 +549,13 @@ export function inferConditions(input: ProfileInput): RankedCondition[] {
       specialty: specialtyById[condition.id] ?? '内科',
       likelihood: toLikelihood(score),
       mustNotMiss: mustNotMissIds.has(condition.id) || Boolean(condition.redFlag),
+      pearl: condition.pearl ?? clinicalPearlsById[condition.id],
     })
   }
 
   return ranked
     .sort((a, b) => b.score - a.score || b.matchRatio - a.matchRatio)
-    .slice(0, 7)
+    .slice(0, 8)
 }
 
 export function highestUrgency(results: RankedCondition[]): Urgency {
@@ -393,6 +587,19 @@ export function resolveDisposition(
   }
 
   if (input.skinSpreading && input.skinSensation === 'painful' && input.feverBand !== 'none') {
+    return 'clinic_today'
+  }
+
+  const flags = new Set(input.contextFlags ?? [])
+  if (
+    flags.has('cold_sweat') ||
+    flags.has('speech_change') ||
+    flags.has('worst_headache') ||
+    (flags.has('pregnancy_possible') && input.symptoms.includes('abdominal_pain'))
+  ) {
+    return 'er_today'
+  }
+  if (input.courseTrend === 'worsening' && input.severity >= 4) {
     return 'clinic_today'
   }
 
@@ -468,6 +675,10 @@ export function buildVisitSummary(input: {
   dispositionTitle: string
   photoFindings?: string[]
   skinNote?: string
+  courseTrend?: string
+  painQuality?: string
+  contextNotes?: string[]
+  doctorQuestions?: string
 }): string {
   const onsetLabel =
     input.onset === 'sudden' ? '突然' : input.onset === 'gradual' ? '徐々に' : '不明'
@@ -488,6 +699,11 @@ export function buildVisitSummary(input: {
     `既往・体質: ${input.history.join('、') || '特記なし'}`,
   ]
 
+  if (input.courseTrend) lines.push(`経過の勢い: ${input.courseTrend}`)
+  if (input.painQuality) lines.push(`痛みの性状: ${input.painQuality}`)
+  if (input.contextNotes?.length) lines.push(`追加問診: ${input.contextNotes.join('、')}`)
+  if (input.doctorQuestions?.trim()) lines.push(`患者からの質問: ${input.doctorQuestions.trim()}`)
+
   if (input.redFlags.length) {
     lines.push(`危険兆候の申告: ${input.redFlags.join('、')}`)
   }
@@ -504,6 +720,7 @@ export function buildVisitSummary(input: {
     lines.push(
       `  ${i + 1}. ${r.condition.name}（${likelihoodLabel(r.likelihood)} / ${r.specialty}${r.mustNotMiss ? ' / 要除外' : ''}）`,
     )
+    if (r.pearl) lines.push(`     専門知見: ${r.pearl}`)
   })
   lines.push('※確定診断・処方は医師の診察に基づいてください。')
   return lines.join('\n')

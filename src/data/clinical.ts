@@ -10,6 +10,10 @@ export type RedFlagId =
   | 'suicidal'
   | 'infant_lethargy'
   | 'abdominal_rigid'
+  | 'sudden_vision_loss'
+  | 'sudden_hearing_loss_flag'
+  | 'one_sided_leg_danger'
+  | 'testicular_acute_pain'
 
 export interface RedFlag {
   id: RedFlagId
@@ -87,6 +91,30 @@ export const redFlags: RedFlag[] = [
     detail: '腹膜炎など外科救急の可能性があります。',
     action: '飲食を控え、救急外来へ。強い場合は119番。',
   },
+  {
+    id: 'sudden_vision_loss',
+    label: '急に見えにくくなった・視野が欠ける',
+    detail: '網膜剥離・急性緑内障・脳血管障害などを除外する必要があります。',
+    action: '眼科救急または119番を検討してください。',
+  },
+  {
+    id: 'sudden_hearing_loss_flag',
+    label: '急に片耳（または両耳）が聞こえにくくなった',
+    detail: '突発性難聴は早期受診が望ましい領域です。',
+    action: 'できるだけ早く耳鼻咽喉科を受診してください。',
+  },
+  {
+    id: 'one_sided_leg_danger',
+    label: '片足だけ急に腫れて痛い（息切れもある）',
+    detail: '深部静脈血栓症・肺塞栓の可能性があります。',
+    action: 'マッサージせず、救急外来へ。息切れがあれば119番。',
+  },
+  {
+    id: 'testicular_acute_pain',
+    label: '陰嚢・睾丸の急な強い痛み',
+    detail: '精巣捻転は時間との勝負になる外科救急です。',
+    action: '直ちに救急・泌尿器科へ。',
+  },
 ]
 
 export type OnsetType = 'sudden' | 'gradual' | 'unclear'
@@ -162,6 +190,46 @@ export const specialtyById: Record<string, string> = {
   dehydration: '内科・救急',
   hypertension_symptom: '内科・循環器内科',
   diabetes_uncontrolled: '内科・糖尿病内科',
+  pneumonia_suspect: '呼吸器内科・救急',
+  copd_exacerbation: '呼吸器内科・救急',
+  pneumothorax_suspect: '救急・呼吸器外科',
+  pe_suspect: '救急・循環器内科',
+  heart_failure: '循環器内科・救急',
+  afib_suspect: '循環器内科',
+  dvt_suspect: '循環器内科・血管外科',
+  stroke_tia: '救急・脳神経内科・脳神経外科',
+  meningitis_suspect: '救急・感染症内科',
+  bppv_vertigo: '耳鼻咽喉科・脳神経内科',
+  bells_palsy: '脳神経内科・耳鼻咽喉科',
+  cholecystitis_suspect: '消化器内科・外科',
+  pancreatitis_suspect: '救急・消化器内科',
+  peptic_ulcer: '消化器内科',
+  ibd_flare: '消化器内科',
+  hepatitis_suspect: '消化器内科・肝臓内科',
+  urolithiasis: '泌尿器科・救急',
+  pyelonephritis: '内科・泌尿器科・救急',
+  testicular_torsion: '救急・泌尿器科',
+  sciatica: '整形外科',
+  gout_attack: '整形外科・リウマチ科・内科',
+  fracture_suspect: '整形外科・救急',
+  sinusitis: '耳鼻咽喉科',
+  tonsillitis: '耳鼻咽喉科・内科',
+  sudden_hearing_loss: '耳鼻咽喉科（至急）',
+  acute_glaucoma: '眼科救急',
+  retinal_detachment_suspect: '眼科救急',
+  dental_abscess: '歯科・口腔外科',
+  hypoglycemia: '救急・糖尿病内科',
+  thyroid_storm_or_thyrotoxic: '内分泌内科',
+  hyperglycemia_crisis: '救急・糖尿病内科',
+  ectopic_pregnancy: '救急・産婦人科',
+  pid_suspect: '婦人科',
+  ovarian_torsion_suspect: '救急・産婦人科',
+  depression_episode: '精神科・心療内科',
+  panic_attack: '心療内科・精神科・内科',
+  ra_flare: 'リウマチ科・内科',
+  sepsis_suspect: '救急・感染症内科',
+  kawasaki_suspect: '小児科・救急',
+  croup_suspect: '小児科・救急',
 }
 
 /** 危険な見逃し（must-not-miss）を特に意識する疾患ID */
@@ -174,4 +242,38 @@ export const mustNotMissIds = new Set([
   'pigmented_lesion',
   'urticaria',
   'dehydration',
+  'pneumonia_suspect',
+  'pneumothorax_suspect',
+  'pe_suspect',
+  'heart_failure',
+  'dvt_suspect',
+  'stroke_tia',
+  'meningitis_suspect',
+  'pancreatitis_suspect',
+  'pyelonephritis',
+  'testicular_torsion',
+  'sudden_hearing_loss',
+  'acute_glaucoma',
+  'retinal_detachment_suspect',
+  'hypoglycemia',
+  'hyperglycemia_crisis',
+  'ectopic_pregnancy',
+  'ovarian_torsion_suspect',
+  'sepsis_suspect',
+  'kawasaki_suspect',
+  'croup_suspect',
 ])
+
+/** 既存疾患へのスーパードクター・パール（specialtyConditions 側は Condition.pearl を優先） */
+export const clinicalPearlsById: Record<string, string> = {
+  angina_acs: '循環器：胸痛は性状（圧迫）・誘因（労作）・放散・随伴（冷汗・嘔気）でACS確率を上げる。',
+  appendicitis_suspect: '外科：痛みが心窩部→右下腹部へ移動する病歴は古典的。歩行時痛・反跳痛を重視。',
+  asthma_attack: '呼吸器：会話困難・陥没呼吸・サイレントチェストは生命危険。吸入反応を見る。',
+  migraine: '脳神経：今までで最悪の頭痛、雷鳴頭痛は二次性頭痛を除外するまで片頭痛と決めない。',
+  uti: '泌尿器：発熱・側腹部痛があれば腎盂腎炎。男性の初回UTIは複雑性として精査。',
+  gerd: '消化器：胸やけでも労作誘発・冷汗があればまず心疾患を除外。',
+  herpes_zoster: '皮膚科：痛みが発疹に先行し得る。眼周囲は眼科併診をためらわない。',
+  cellulitis: '感染症：境界不明瞭な熱感ある赤み＋発熱は抗菌治療の適応検討。壊死性は激痛・急拡大。',
+  influenza: '内科：発症48時間以内の抗ウイルス検討と、肺炎合併・持病悪化の監視が要点。',
+  dehydration: '救急：乳幼児・高齢者は代償が破綻しやすい。尿量・意識・皮膚ツルゴールを見る。',
+}

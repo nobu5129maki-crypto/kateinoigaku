@@ -153,6 +153,82 @@ const symptomKeywords: { id: SymptomId; keywords: string[] }[] = [
     id: 'swelling',
     keywords: ['むくみ', '腫れ', '腫れて', '腫れた', '浮腫'],
   },
+  {
+    id: 'numbness',
+    keywords: ['しびれ', '麻痺', '力が入らない', '感覚が鈍'],
+  },
+  {
+    id: 'neck_pain',
+    keywords: ['首の痛', '首が痛', '頸部痛', '首がこわば'],
+  },
+  {
+    id: 'flank_pain',
+    keywords: ['わき腹', '側腹部', '側腹部痛', '腎部の痛'],
+  },
+  {
+    id: 'calf_pain',
+    keywords: ['ふくらはぎ', 'ふくらはぎの痛', '下腿の痛'],
+  },
+  {
+    id: 'wheezing',
+    keywords: ['ぜーぜー', 'ゼーゼー', 'ぜん鳴', 'ヒューヒュー'],
+  },
+  {
+    id: 'syncope',
+    keywords: ['失神', '気を失', '倒れそう', '意識を失'],
+  },
+  {
+    id: 'confusion',
+    keywords: ['もうろう', '意識がはっきりしない', 'せん妄', 'うわごと'],
+  },
+  {
+    id: 'hearing_loss',
+    keywords: ['聞こえにく', '難聴', '耳が遠い', '耳が聞こえない'],
+  },
+  {
+    id: 'tinnitus',
+    keywords: ['耳鳴', '耳鳴り'],
+  },
+  {
+    id: 'difficulty_swallowing',
+    keywords: ['飲み込みにく', '嚥下', '食べ物が通らない'],
+  },
+  {
+    id: 'hoarseness',
+    keywords: ['声のかすれ', '嗄声', '声がかすれ'],
+  },
+  {
+    id: 'loss_of_smell',
+    keywords: ['においがわからない', '嗅覚', '匂いがしない'],
+  },
+  {
+    id: 'jaundice',
+    keywords: ['黄疸', '目が黄色い', '皮膚が黄色い'],
+  },
+  {
+    id: 'thirst',
+    keywords: ['口渇', 'ひどく渇', '水をたくさん'],
+  },
+  {
+    id: 'tremor',
+    keywords: ['ふるえ', '手の震え', '振戦'],
+  },
+  {
+    id: 'depression_mood',
+    keywords: ['気分が落ち', 'うつ', '憂うつ', '何も楽しくない'],
+  },
+  {
+    id: 'tooth_pain',
+    keywords: ['歯の痛', '歯痛', '歯が痛'],
+  },
+  {
+    id: 'vaginal_bleeding',
+    keywords: ['不正出血', '性器出血', 'おりものに血'],
+  },
+  {
+    id: 'testicular_pain',
+    keywords: ['陰嚢', '睾丸', '金玉が痛', '精巣が痛'],
+  },
 ]
 
 export function parseSymptomsFromText(text: string): SymptomId[] {
