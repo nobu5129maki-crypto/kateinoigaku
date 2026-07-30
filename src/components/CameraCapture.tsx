@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
 import {
   analyzeSkinBlob,
   type ImageAnalysisResult,
@@ -11,13 +11,21 @@ interface CameraCaptureProps {
   onClear: () => void
 }
 
+function isLikelyMobile() {
+  if (typeof navigator === 'undefined') return false
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+}
+
 export function CameraCapture({ analysis, previewUrl, onCaptured, onClear }: CameraCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const cameraFileRef = useRef<HTMLInputElement>(null)
   const [streaming, setStreaming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
   const streamRef = useRef<MediaStream | null>(null)
+  const mobile = isLikelyMobile()
 
   useEffect(() => {
     return () => {
@@ -34,9 +42,15 @@ export function CameraCapture({ analysis, previewUrl, onCaptured, onClear }: Cam
   async function startCamera() {
     setError(null)
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setError(
+          'この端末ではライブカメラを開けません。下の「画像ファイルを選ぶ」から写真を追加してください。',
+        )
+        return
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: { ideal: 'environment' },
+          facingMode: { ideal: mobile ? 'environment' : 'user' },
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
@@ -49,7 +63,9 @@ export function CameraCapture({ analysis, previewUrl, onCaptured, onClear }: Cam
       }
       setStreaming(true)
     } catch {
-      setError('カメラを開けませんでした。下の「写真ライブラリから選ぶ」をご利用ください。')
+      setError(
+        'カメラを開けませんでした。パソコンの場合は「画像ファイルを選ぶ」か、ブラウザのカメラ許可をご確認ください。',
+      )
     }
   }
 
@@ -83,13 +99,27 @@ export function CameraCapture({ analysis, previewUrl, onCaptured, onClear }: Cam
 
   async function onFileChange(file: File | undefined) {
     if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setError('画像ファイル（JPEG / PNG / WebP など）を選んでください。')
+      return
+    }
     await processBlob(file)
+  }
+
+  function onDrop(e: DragEvent) {
+    e.preventDefault()
+    setDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    void onFileChange(file)
   }
 
   return (
     <div className="camera-panel">
       <div className="camera-tips">
-        <p>病変が画面中央に来るよう、影を避けて撮影してください。解析は端末内で行い、写真はサーバーへ送りません。</p>
+        <p>
+          病変が画面中央に来るよう、影を避けて撮影してください。解析は端末内で行い、写真はサーバーへ送りません。
+          パソコンからはウェブカメラ、または画像ファイルの選択・ドラッグ＆ドロップが使えます。
+        </p>
       </div>
 
       {previewUrl ? (
@@ -115,12 +145,24 @@ export function CameraCapture({ analysis, previewUrl, onCaptured, onClear }: Cam
         </div>
       ) : (
         <>
-          <div className={`camera-viewfinder ${streaming ? 'is-live' : ''}`}>
+          <div
+            className={`camera-viewfinder ${streaming ? 'is-live' : ''} ${dragging ? 'is-drag' : ''}`}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragging(true)
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={onDrop}
+          >
             <video ref={videoRef} playsInline muted className={streaming ? 'is-on' : ''} />
             {!streaming && (
               <div className="camera-placeholder">
-                <span>カメラ</span>
-                <p>患部を枠の中に入れて撮影</p>
+                <span>{dragging ? 'ここにドロップ' : 'カメラ / ファイル'}</span>
+                <p>
+                  {mobile
+                    ? '患部を枠の中に入れて撮影'
+                    : 'ウェブカメラを起動するか、画像をドロップ'}
+                </p>
               </div>
             )}
             <div className="viewfinder-frame" aria-hidden="true" />
@@ -129,7 +171,7 @@ export function CameraCapture({ analysis, previewUrl, onCaptured, onClear }: Cam
           <div className="camera-actions">
             {!streaming ? (
               <button type="button" className="btn btn-primary" onClick={startCamera} disabled={busy}>
-                カメラを起動
+                {mobile ? 'カメラを起動' : 'ウェブカメラを起動'}
               </button>
             ) : (
               <button type="button" className="btn btn-primary" onClick={captureFrame} disabled={busy}>
@@ -142,15 +184,40 @@ export function CameraCapture({ analysis, previewUrl, onCaptured, onClear }: Cam
               onClick={() => fileRef.current?.click()}
               disabled={busy}
             >
-              写真ライブラリから選ぶ
+              画像ファイルを選ぶ
             </button>
+            {mobile && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => cameraFileRef.current?.click()}
+                disabled={busy}
+              >
+                写真ライブラリ
+              </button>
+            )}
+            {/* PC向け: capture 属性なしでファイルダイアログを開く */}
             <input
               ref={fileRef}
               type="file"
               accept="image/*"
+              hidden
+              onChange={(e) => {
+                void onFileChange(e.target.files?.[0])
+                e.target.value = ''
+              }}
+            />
+            {/* モバイル向けカメラ／ライブラリ */}
+            <input
+              ref={cameraFileRef}
+              type="file"
+              accept="image/*"
               capture="environment"
               hidden
-              onChange={(e) => onFileChange(e.target.files?.[0])}
+              onChange={(e) => {
+                void onFileChange(e.target.files?.[0])
+                e.target.value = ''
+              }}
             />
           </div>
         </>

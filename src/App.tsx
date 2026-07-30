@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { CameraCapture } from './components/CameraCapture'
+import { ConfirmInterview } from './components/ConfirmInterview'
 import { InstallPrompt } from './components/InstallPrompt'
 import {
   feverOptions,
@@ -14,6 +15,7 @@ import {
   type SkinSensation,
   type SkinSite,
 } from './data/clinical'
+import { pickConfirmQuestions } from './data/confirmQuestions'
 import {
   contextFlagOptions,
   contextGroups,
@@ -30,6 +32,11 @@ import {
   type Sex,
   type SymptomId,
 } from './data/conditions'
+import {
+  formatConfirmAnswers,
+  mergeConfirmPatches,
+  optionPatch,
+} from './lib/confirmInterview'
 import {
   buildVisitSummary,
   dispositionCopy,
@@ -52,6 +59,7 @@ type Step =
   | 'symptoms'
   | 'photo'
   | 'history'
+  | 'confirm'
   | 'detail'
   | 'result'
 type Mode = 'standard' | 'camera'
@@ -63,6 +71,7 @@ const sexOptions: { id: Sex; label: string }[] = [
 ]
 
 const categories = [...new Set(symptoms.map((s) => s.category))]
+const TOTAL_STEPS = 7
 
 function App() {
   const [step, setStep] = useState<Step>('landing')
@@ -87,7 +96,41 @@ function App() {
   const [painQuality, setPainQuality] = useState<PainQuality>('unknown')
   const [contextFlags, setContextFlags] = useState<ContextFlagId[]>([])
   const [doctorQuestions, setDoctorQuestions] = useState('')
+  const [confirmAnswers, setConfirmAnswers] = useState<Record<string, string>>({})
+  const [confirmFreeText, setConfirmFreeText] = useState('')
   const [copied, setCopied] = useState(false)
+
+  const confirmQuestionList = useMemo(
+    () => pickConfirmQuestions({ symptoms: selectedSymptoms, sex, age, max: 8 }),
+    [selectedSymptoms, sex, age],
+  )
+
+  const confirmPatch = useMemo(() => {
+    const patches = confirmQuestionList.map((q) => {
+      const opt = q.options.find((o) => o.id === confirmAnswers[q.id])
+      return optionPatch(opt)
+    })
+    return mergeConfirmPatches(patches)
+  }, [confirmQuestionList, confirmAnswers])
+
+  const effectiveContextFlags = useMemo(() => {
+    const set = new Set([...contextFlags, ...confirmPatch.contextFlags])
+    return [...set]
+  }, [contextFlags, confirmPatch.contextFlags])
+
+  const effectiveSymptoms = useMemo(() => {
+    const set = new Set([...selectedSymptoms, ...confirmPatch.addSymptoms])
+    return [...set]
+  }, [selectedSymptoms, confirmPatch.addSymptoms])
+
+  const effectivePainQuality = confirmPatch.painQuality ?? painQuality
+  const effectiveOnset = confirmPatch.onset ?? onset
+  const effectiveCourseTrend = confirmPatch.courseTrend ?? courseTrend
+  const effectiveSkinSensation = confirmPatch.skinSensation ?? skinSensation
+  const effectiveSkinSpreading = confirmPatch.skinSpreading ?? skinSpreading
+  const effectiveSkinBlisters = confirmPatch.skinBlisters ?? skinBlisters
+
+  const combinedFreeText = [symptomText, confirmFreeText].filter((t) => t.trim()).join('\n')
 
   const triage = useMemo(() => evaluateTriage(redFlagIds, age), [redFlagIds, age])
 
@@ -96,45 +139,45 @@ function App() {
     return inferConditions({
       age,
       sex,
-      symptoms: selectedSymptoms,
+      symptoms: effectiveSymptoms,
       history,
       durationDays,
       severity,
       imageAnalysis,
       redFlagIds,
-      onset,
+      onset: effectiveOnset,
       feverBand,
       skinSite,
-      skinSensation,
-      skinSpreading,
-      skinBlisters,
-      courseTrend,
-      painQuality,
-      contextFlags,
+      skinSensation: effectiveSkinSensation,
+      skinSpreading: effectiveSkinSpreading,
+      skinBlisters: effectiveSkinBlisters,
+      courseTrend: effectiveCourseTrend,
+      painQuality: effectivePainQuality,
+      contextFlags: effectiveContextFlags,
       doctorQuestions,
-      freeText: symptomText,
+      freeText: combinedFreeText,
     })
   }, [
     step,
     age,
     sex,
-    selectedSymptoms,
+    effectiveSymptoms,
     history,
     durationDays,
     severity,
     imageAnalysis,
     redFlagIds,
-    onset,
+    effectiveOnset,
     feverBand,
     skinSite,
-    skinSensation,
-    skinSpreading,
-    skinBlisters,
-    courseTrend,
-    painQuality,
-    contextFlags,
+    effectiveSkinSensation,
+    effectiveSkinSpreading,
+    effectiveSkinBlisters,
+    effectiveCourseTrend,
+    effectivePainQuality,
+    effectiveContextFlags,
     doctorQuestions,
-    symptomText,
+    combinedFreeText,
   ])
 
   const urgency = highestUrgency(results)
@@ -143,46 +186,46 @@ function App() {
       resolveDisposition(results, triage, {
         age,
         sex,
-        symptoms: selectedSymptoms,
+        symptoms: effectiveSymptoms,
         history,
         durationDays,
         severity,
         imageAnalysis,
         redFlagIds,
-        onset,
+        onset: effectiveOnset,
         feverBand,
         skinSite,
-        skinSensation,
-        skinSpreading,
-        skinBlisters,
-        courseTrend,
-        painQuality,
-        contextFlags,
+        skinSensation: effectiveSkinSensation,
+        skinSpreading: effectiveSkinSpreading,
+        skinBlisters: effectiveSkinBlisters,
+        courseTrend: effectiveCourseTrend,
+        painQuality: effectivePainQuality,
+        contextFlags: effectiveContextFlags,
         doctorQuestions,
-        freeText: symptomText,
+        freeText: combinedFreeText,
       }),
     [
       results,
       triage,
       age,
       sex,
-      selectedSymptoms,
+      effectiveSymptoms,
       history,
       durationDays,
       severity,
       imageAnalysis,
       redFlagIds,
-      onset,
+      effectiveOnset,
       feverBand,
       skinSite,
-      skinSensation,
-      skinSpreading,
-      skinBlisters,
-      courseTrend,
-      painQuality,
-      contextFlags,
+      effectiveSkinSensation,
+      effectiveSkinSpreading,
+      effectiveSkinBlisters,
+      effectiveCourseTrend,
+      effectivePainQuality,
+      effectiveContextFlags,
       doctorQuestions,
-      symptomText,
+      combinedFreeText,
     ],
   )
   const dispositionText = dispositionCopy(disposition)
@@ -190,22 +233,35 @@ function App() {
   const sexLabel = sexOptions.find((s) => s.id === sex)?.label ?? ''
   const showSkinQuestions =
     mode === 'camera' ||
-    selectedSymptoms.some((s) => ['rash', 'itch', 'swelling'].includes(s)) ||
+    effectiveSymptoms.some((s) => ['rash', 'itch', 'swelling'].includes(s)) ||
     Boolean(imageAnalysis)
+
+  const confirmAnswerLines = useMemo(
+    () =>
+      formatConfirmAnswers(
+        confirmQuestionList
+          .filter((q) => confirmAnswers[q.id])
+          .map((q) => ({
+            prompt: q.prompt,
+            answerLabel: q.options.find((o) => o.id === confirmAnswers[q.id])?.label ?? '',
+          })),
+      ),
+    [confirmQuestionList, confirmAnswers],
+  )
 
   const visitSummary = useMemo(() => {
     const skinNote = showSkinQuestions
       ? [
           skinSiteOptions.find((s) => s.id === skinSite)?.label,
-          skinSensationOptions.find((s) => s.id === skinSensation)?.label,
-          skinSpreading ? '拡大あり' : null,
-          skinBlisters ? '水疱あり' : null,
+          skinSensationOptions.find((s) => s.id === effectiveSkinSensation)?.label,
+          effectiveSkinSpreading ? '拡大あり' : null,
+          effectiveSkinBlisters ? '水疱あり' : null,
         ]
           .filter(Boolean)
           .join(' / ')
       : undefined
 
-    const symptomLabels = selectedSymptoms.map(
+    const symptomLabels = effectiveSymptoms.map(
       (id) => symptoms.find((s) => s.id === id)?.label ?? id,
     )
 
@@ -223,29 +279,33 @@ function App() {
         .map((id) => historyOptions.find((h) => h.id === id)?.label ?? id),
       durationDays,
       severity,
-      onset,
+      onset: effectiveOnset,
       feverBand,
       redFlags: triage.activeFlags.map((f) => f.label),
       results,
       dispositionTitle: dispositionText.title,
       photoFindings: imageAnalysis?.findings.map((f) => f.label),
       skinNote,
-      courseTrend: courseTrendOptions.find((c) => c.id === courseTrend)?.label,
-      painQuality: painQualityOptions.find((p) => p.id === painQuality)?.label,
-      contextNotes: contextFlags.map(
-        (id) => contextFlagOptions.find((c) => c.id === id)?.label ?? id,
-      ),
+      courseTrend: courseTrendOptions.find((c) => c.id === effectiveCourseTrend)?.label,
+      painQuality: painQualityOptions.find((p) => p.id === effectivePainQuality)?.label,
+      contextNotes: [
+        ...effectiveContextFlags.map(
+          (id) => contextFlagOptions.find((c) => c.id === id)?.label ?? id,
+        ),
+        ...confirmAnswerLines,
+        ...(confirmFreeText.trim() ? [`確認の補足: ${confirmFreeText.trim()}`] : []),
+      ],
       doctorQuestions,
     })
   }, [
     age,
     sexLabel,
     symptomText,
-    selectedSymptoms,
+    effectiveSymptoms,
     history,
     durationDays,
     severity,
-    onset,
+    effectiveOnset,
     feverBand,
     triage.activeFlags,
     results,
@@ -253,12 +313,14 @@ function App() {
     imageAnalysis,
     showSkinQuestions,
     skinSite,
-    skinSensation,
-    skinSpreading,
-    skinBlisters,
-    courseTrend,
-    painQuality,
-    contextFlags,
+    effectiveSkinSensation,
+    effectiveSkinSpreading,
+    effectiveSkinBlisters,
+    effectiveCourseTrend,
+    effectivePainQuality,
+    effectiveContextFlags,
+    confirmAnswerLines,
+    confirmFreeText,
     doctorQuestions,
   ])
 
@@ -343,6 +405,8 @@ function App() {
     setPainQuality('unknown')
     setContextFlags([])
     setDoctorQuestions('')
+    setConfirmAnswers({})
+    setConfirmFreeText('')
     setCopied(false)
   }
 
@@ -353,6 +417,32 @@ function App() {
       return
     }
     setStep(mode === 'camera' ? 'photo' : 'symptoms')
+  }
+
+  function onConfirmAnswer(questionId: string, optionId: string) {
+    setConfirmAnswers((prev) => ({ ...prev, [questionId]: optionId }))
+  }
+
+  function applyConfirmPatchesToState() {
+    const patch = confirmPatch
+    if (patch.contextFlags.length) {
+      setContextFlags((prev) => [...new Set([...prev, ...patch.contextFlags])])
+    }
+    if (patch.painQuality) setPainQuality(patch.painQuality)
+    if (patch.onset) setOnset(patch.onset)
+    if (patch.feverBand) setFeverBand(patch.feverBand)
+    if (patch.courseTrend) setCourseTrend(patch.courseTrend)
+    if (patch.skinSensation) setSkinSensation(patch.skinSensation)
+    if (patch.skinSpreading !== undefined) setSkinSpreading(patch.skinSpreading)
+    if (patch.skinBlisters !== undefined) setSkinBlisters(patch.skinBlisters)
+    if (patch.addSymptoms.length) {
+      setSelectedSymptoms((prev) => [...new Set([...prev, ...patch.addSymptoms])])
+    }
+  }
+
+  function proceedFromConfirm() {
+    applyConfirmPatchesToState()
+    setStep('detail')
   }
 
   async function copySummary() {
@@ -371,7 +461,7 @@ function App() {
   const canProceedFromSymptoms =
     symptomText.trim().length > 0 || selectedSymptoms.length > 0 || Boolean(imageAnalysis)
 
-  const showPainQuestions = selectedSymptoms.some((s) =>
+  const showPainQuestions = effectiveSymptoms.some((s) =>
     [
       'headache',
       'chest_pain',
@@ -446,7 +536,7 @@ function App() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.35 }}
                 >
-                  危険兆候の確認から、全科の専門知見に基づく症状・写真・経過・質問まで。受診の優先度と鑑別の手がかりを整理します。
+                  危険兆候の確認から、全科の専門知見に基づく症状・写真・確認問診まで。パソコンからも医師視点の確認質問に答えられます。
                 </motion.p>
                 <motion.div
                   className="hero-actions"
@@ -518,7 +608,7 @@ function App() {
             <WizardFrame
               key="profile"
               stepIndex={1}
-              totalSteps={6}
+              totalSteps={TOTAL_STEPS}
               title="はじめに、あなたのこと"
               subtitle="年齢と性別は、重症化リスクと鑑別の絞り込みに使います。"
               onBack={() => setStep('landing')}
@@ -563,7 +653,7 @@ function App() {
             <WizardFrame
               key="triage"
               stepIndex={2}
-              totalSteps={6}
+              totalSteps={TOTAL_STEPS}
               title="いま、次の危険兆候はありますか？"
               subtitle="医師が最初に除外する所見です。ひとつでもあれば救急を優先します。なければ「該当なし」のまま次へ。"
               onBack={() => setStep('profile')}
@@ -646,7 +736,7 @@ function App() {
             <WizardFrame
               key="symptoms"
               stepIndex={3}
-              totalSteps={6}
+              totalSteps={TOTAL_STEPS}
               title="いまの症状は？"
               subtitle={
                 mode === 'camera'
@@ -734,9 +824,9 @@ function App() {
             <WizardFrame
               key="photo"
               stepIndex={mode === 'camera' ? 3 : 4}
-              totalSteps={6}
+              totalSteps={TOTAL_STEPS}
               title={mode === 'camera' ? '皮膚・患部を撮影' : '写真があれば追加（任意）'}
-              subtitle="色調解析は参考です。診断の代替にはなりません。"
+              subtitle="色調解析は参考です。診断の代替にはなりません。パソコンからは画像ファイル選択・ドラッグ＆ドロップもできます。"
               onBack={() => setStep(mode === 'camera' ? 'triage' : 'symptoms')}
               onNext={() => setStep(mode === 'camera' ? 'symptoms' : 'history')}
               nextDisabled={mode === 'camera' && !imageAnalysis}
@@ -761,12 +851,12 @@ function App() {
             <WizardFrame
               key="history"
               stepIndex={5}
-              totalSteps={6}
+              totalSteps={TOTAL_STEPS}
               title="病歴・体質はありますか？"
               subtitle="心疾患・糖尿病・COPD・血栓・免疫抑制・妊娠などは、同じ症状でも緊急度と鑑別が変わります。"
               onBack={() => setStep(mode === 'camera' ? 'symptoms' : 'photo')}
-              onNext={() => setStep('detail')}
-              nextLabel="次へ：経過の詳細"
+              onNext={() => setStep('confirm')}
+              nextLabel="次へ：スーパードクター確認問診"
             >
               <div className="chip-row wrap">
                 {historyOptions.map((opt) => (
@@ -783,14 +873,37 @@ function App() {
             </WizardFrame>
           )}
 
+          {step === 'confirm' && (
+            <WizardFrame
+              key="confirm"
+              stepIndex={6}
+              totalSteps={TOTAL_STEPS}
+              title="スーパードクター確認問診"
+              subtitle="症状に合わせて、全科の視点から確認の質問をします。スマホでもパソコンでも答えられます（PCは数字キー対応）。"
+              onBack={() => setStep('history')}
+              onNext={proceedFromConfirm}
+              nextLabel="次へ：経過の詳細"
+            >
+              <ConfirmInterview
+                symptoms={selectedSymptoms}
+                sex={sex}
+                age={age}
+                answers={confirmAnswers}
+                onAnswer={onConfirmAnswer}
+                freeText={confirmFreeText}
+                onFreeTextChange={setConfirmFreeText}
+              />
+            </WizardFrame>
+          )}
+
           {step === 'detail' && (
             <WizardFrame
               key="detail"
-              stepIndex={6}
-              totalSteps={6}
-              title="スーパードクター問診"
-              subtitle="発症・熱・経過に加え、痛みの性状・誘因・要注意サイン、そして医師への質問を整理します。"
-              onBack={() => setStep('history')}
+              stepIndex={7}
+              totalSteps={TOTAL_STEPS}
+              title="経過・熱・受診メモ"
+              subtitle="発症・熱・つらさに加え、追加の要注意サインと医師への質問を整理します。"
+              onBack={() => setStep('confirm')}
               onNext={() => setStep('result')}
               nextLabel="鑑別と受診方針を見る"
             >
@@ -1140,6 +1253,20 @@ function App() {
                 </ul>
               </section>
 
+              {confirmAnswerLines.length > 0 && (
+                <section className="clinical-block">
+                  <h3>スーパードクター確認問診の回答</h3>
+                  <ul className="recheck-list">
+                    {confirmAnswerLines.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                  {confirmFreeText.trim() && (
+                    <p className="doctor-q-preview">{confirmFreeText.trim()}</p>
+                  )}
+                </section>
+              )}
+
               {doctorQuestions.trim() && (
                 <section className="clinical-block">
                   <h3>あなたが医師に聞きたいこと</h3>
@@ -1166,8 +1293,11 @@ function App() {
               </aside>
 
               <div className="result-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setStep('detail')}>
-                  入力を見直す
+                <button type="button" className="btn btn-secondary" onClick={() => setStep('confirm')}>
+                  確認問診を見直す
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={() => setStep('detail')}>
+                  経過入力を見直す
                 </button>
                 <button type="button" className="btn btn-primary" onClick={reset}>
                   はじめから
