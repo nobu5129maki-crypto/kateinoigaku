@@ -49,6 +49,7 @@ import {
 } from './lib/infer'
 import type { ImageAnalysisResult } from './lib/imageAnalysis'
 import { parseSymptomsFromText } from './lib/parseSymptoms'
+import { suggestVisitNotes } from './lib/suggestVisitNotes'
 import './App.css'
 
 type Step =
@@ -135,7 +136,7 @@ function App() {
   const triage = useMemo(() => evaluateTriage(redFlagIds, age), [redFlagIds, age])
 
   const results = useMemo(() => {
-    if (step !== 'result') return []
+    if (effectiveSymptoms.length === 0 && !imageAnalysis && !symptomText.trim()) return []
     return inferConditions({
       age,
       sex,
@@ -158,7 +159,6 @@ function App() {
       freeText: combinedFreeText,
     })
   }, [
-    step,
     age,
     sex,
     effectiveSymptoms,
@@ -178,6 +178,7 @@ function App() {
     effectiveContextFlags,
     doctorQuestions,
     combinedFreeText,
+    symptomText,
   ])
 
   const urgency = highestUrgency(results)
@@ -249,6 +250,43 @@ function App() {
     [confirmQuestionList, confirmAnswers],
   )
 
+  const visitSuggestions = useMemo(() => {
+    return suggestVisitNotes({
+      age,
+      sex,
+      symptoms: effectiveSymptoms,
+      history,
+      durationDays,
+      severity,
+      onset: effectiveOnset,
+      contextFlags: effectiveContextFlags,
+      results,
+      disposition,
+      symptomText,
+      confirmAnswerLines,
+      photoSummary: imageAnalysis?.summary,
+    })
+  }, [
+    age,
+    sex,
+    effectiveSymptoms,
+    history,
+    durationDays,
+    severity,
+    effectiveOnset,
+    effectiveContextFlags,
+    results,
+    disposition,
+    symptomText,
+    confirmAnswerLines,
+    imageAnalysis?.summary,
+  ])
+
+  const displayAskDoctor =
+    doctorQuestions.trim() || visitSuggestions.askDoctorText
+  const displayTellDoctor =
+    confirmFreeText.trim() || visitSuggestions.tellDoctorText
+
   const visitSummary = useMemo(() => {
     const skinNote = showSkinQuestions
       ? [
@@ -293,9 +331,9 @@ function App() {
           (id) => contextFlagOptions.find((c) => c.id === id)?.label ?? id,
         ),
         ...confirmAnswerLines,
-        ...(confirmFreeText.trim() ? [`確認の補足: ${confirmFreeText.trim()}`] : []),
+        `追加で伝えたいこと:\n${displayTellDoctor}`,
       ],
-      doctorQuestions,
+      doctorQuestions: displayAskDoctor,
     })
   }, [
     age,
@@ -320,8 +358,8 @@ function App() {
     effectivePainQuality,
     effectiveContextFlags,
     confirmAnswerLines,
-    confirmFreeText,
-    doctorQuestions,
+    displayTellDoctor,
+    displayAskDoctor,
   ])
 
   function toggleSymptom(id: SymptomId) {
@@ -892,6 +930,7 @@ function App() {
                 onAnswer={onConfirmAnswer}
                 freeText={confirmFreeText}
                 onFreeTextChange={setConfirmFreeText}
+                suggestedTellText={visitSuggestions.tellDoctorText}
               />
             </WizardFrame>
           )}
@@ -1082,16 +1121,28 @@ function App() {
                   </>
                 )}
 
-                <label className="field">
-                  <span className="field-label">医師への質問・伝えたいこと</span>
+                <div className="field">
+                  <span className="field-label">医師に聞きたいこと</span>
+                  <button
+                    type="button"
+                    className="btn btn-secondary suggest-fill-btn"
+                    onClick={() => setDoctorQuestions(visitSuggestions.askDoctorText)}
+                  >
+                    スーパードクター提案を入れる
+                  </button>
                   <textarea
                     className="symptom-textarea doctor-questions"
                     value={doctorQuestions}
                     onChange={(e) => setDoctorQuestions(e.target.value)}
-                    rows={4}
-                    placeholder="例）仕事は休んだ方がいいですか？／市販薬は何がよいですか？／検査は必要ですか？／再診の目安は？"
+                    rows={5}
+                    placeholder="提案を入れるか、自分の言葉で書いてください"
                   />
-                </label>
+                  {!doctorQuestions.trim() && (
+                    <pre className="suggest-preview" aria-label="医師に聞きたいことの提案">
+                      {visitSuggestions.askDoctorText}
+                    </pre>
+                  )}
+                </div>
               </div>
             </WizardFrame>
           )}
@@ -1253,26 +1304,52 @@ function App() {
                 </ul>
               </section>
 
-              {confirmAnswerLines.length > 0 && (
+              {(confirmAnswerLines.length > 0 || displayTellDoctor) && (
                 <section className="clinical-block">
                   <h3>スーパードクター確認問診の回答</h3>
-                  <ul className="recheck-list">
-                    {confirmAnswerLines.map((line) => (
-                      <li key={line}>{line}</li>
-                    ))}
-                  </ul>
-                  {confirmFreeText.trim() && (
-                    <p className="doctor-q-preview">{confirmFreeText.trim()}</p>
+                  {confirmAnswerLines.length > 0 && (
+                    <ul className="recheck-list">
+                      {confirmAnswerLines.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
                   )}
                 </section>
               )}
 
-              {doctorQuestions.trim() && (
-                <section className="clinical-block">
-                  <h3>あなたが医師に聞きたいこと</h3>
-                  <p className="doctor-q-preview">{doctorQuestions.trim()}</p>
-                </section>
-              )}
+              <section className="clinical-block suggest-block">
+                <h3>追加で伝えたいこと</h3>
+                <p className="clinical-lead">
+                  受診時に医師へ渡す要点です。未入力の場合はスーパードクターが症状から提案しています。
+                </p>
+                <pre className="suggest-answer">{displayTellDoctor}</pre>
+                {!confirmFreeText.trim() && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setConfirmFreeText(visitSuggestions.tellDoctorText)}
+                  >
+                    この提案を採用する
+                  </button>
+                )}
+              </section>
+
+              <section className="clinical-block suggest-block">
+                <h3>医師に聞きたいこと</h3>
+                <p className="clinical-lead">
+                  診察で確認するとよい質問です。未入力の場合は鑑別と緊急度から提案しています。
+                </p>
+                <pre className="suggest-answer">{displayAskDoctor}</pre>
+                {!doctorQuestions.trim() && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setDoctorQuestions(visitSuggestions.askDoctorText)}
+                  >
+                    この提案を採用する
+                  </button>
+                )}
+              </section>
 
               <section className="clinical-block summary-block">
                 <div className="summary-head">

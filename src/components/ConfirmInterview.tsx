@@ -14,6 +14,7 @@ interface ConfirmInterviewProps {
   onAnswer: (questionId: string, optionId: string) => void
   freeText: string
   onFreeTextChange: (value: string) => void
+  suggestedTellText?: string
 }
 
 export function ConfirmInterview({
@@ -24,6 +25,7 @@ export function ConfirmInterview({
   onAnswer,
   freeText,
   onFreeTextChange,
+  suggestedTellText,
 }: ConfirmInterviewProps) {
   const questions = useMemo(
     () => pickConfirmQuestions({ symptoms, sex, age, max: 8 }),
@@ -76,7 +78,11 @@ export function ConfirmInterview({
         <p className="confirm-empty">
           いまの症状からは追加の確認質問は少なめです。下の自由記入で気になる点を書いてください（パソコンのキーボードでも入力できます）。
         </p>
-        <FreeTextField value={freeText} onChange={onFreeTextChange} />
+        <FreeTextField
+          value={freeText}
+          onChange={onFreeTextChange}
+          suggestedText={suggestedTellText}
+        />
       </div>
     )
   }
@@ -141,7 +147,11 @@ export function ConfirmInterview({
         <p className="confirm-memo-hint">回答は鑑別スコアと受診メモに反映されます。</p>
       )}
 
-      <FreeTextField value={freeText} onChange={onFreeTextChange} />
+      <FreeTextField
+        value={freeText}
+        onChange={onFreeTextChange}
+        suggestedText={suggestedTellText}
+      />
     </div>
   )
 }
@@ -184,20 +194,40 @@ function QuestionCard({
 function FreeTextField({
   value,
   onChange,
+  suggestedText,
 }: {
   value: string
   onChange: (v: string) => void
+  suggestedText?: string
 }) {
   return (
-    <label className="field confirm-freetext">
+    <div className="field confirm-freetext">
       <span className="field-label">追加で伝えたいこと（パソコンからも自由入力）</span>
+      {suggestedText && (
+        <button
+          type="button"
+          className="btn btn-secondary suggest-fill-btn"
+          onClick={() => onChange(suggestedText)}
+        >
+          スーパードクター提案を入れる
+        </button>
+      )}
       <textarea
         className="symptom-textarea"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        rows={4}
-        placeholder="例）昨日の夜から悪化。市販の解熱剤を飲んだ。仕事で長時間座っている。右足だけむくむ気がする——"
+        rows={5}
+        placeholder={
+          suggestedText
+            ? '提案を入れるか、自分の言葉で書いてください'
+            : '例）昨日の夜から悪化。市販の解熱剤を飲んだ。仕事で長時間座っている。右足だけむくむ気がする——'
+        }
       />
-    </label>
+      {suggestedText && !value.trim() && (
+        <pre className="suggest-preview" aria-label="追加で伝えたいことの提案">
+          {suggestedText}
+        </pre>
+      )}
+    </div>
   )
 }
