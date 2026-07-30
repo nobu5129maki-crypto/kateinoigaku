@@ -1248,3 +1248,223 @@
     width: 100%;
   }
 }
+
+/* —— スーパードクター確認問診（PC / スマホ共通） —— */
+.confirm-panel {
+  display: grid;
+  gap: 1.15rem;
+}
+
+.confirm-progress-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+
+.confirm-kbd-hint {
+  opacity: 0.85;
+}
+
+.confirm-nav {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.confirm-nav-dot {
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 0.65rem;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--ink-soft);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.confirm-nav-dot.is-done {
+  background: rgba(31, 92, 77, 0.12);
+  border-color: rgba(31, 92, 77, 0.35);
+  color: var(--accent-strong);
+}
+
+.confirm-nav-dot.is-active {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: #f4faf7;
+}
+
+.confirm-card {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1.15rem 1.2rem 1.25rem;
+  border-radius: 1.15rem;
+  background: linear-gradient(160deg, rgba(244, 250, 247, 0.92), rgba(220, 236, 228, 0.55));
+  border: 1px solid rgba(31, 92, 77, 0.16);
+}
+
+.confirm-doctor-label {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.confirm-prompt {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.15rem, 2.4vw, 1.45rem);
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.confirm-why {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.confirm-options {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.35rem;
+}
+
+@media (min-width: 720px) {
+  .confirm-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.confirm-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: left;
+  padding: 0.85rem 1rem;
+  border-radius: 0.95rem;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 0.98rem;
+  line-height: 1.4;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
+}
+
+.confirm-option:hover {
+  border-color: rgba(31, 92, 77, 0.45);
+  transform: translateY(-1px);
+}
+
+.confirm-option.is-on {
+  background: #1f5c4d;
+  border-color: #1f5c4d;
+  color: #f4faf7;
+}
+
+.confirm-key {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.55rem;
+  height: 1.55rem;
+  padding: 0 0.3rem;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(31, 92, 77, 0.28);
+  background: rgba(31, 92, 77, 0.08);
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--accent-strong);
+}
+
+.confirm-option.is-on .confirm-key {
+  background: rgba(244, 250, 247, 0.18);
+  border-color: rgba(244, 250, 247, 0.35);
+  color: #f4faf7;
+}
+
+.confirm-all-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.confirm-summary-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  align-items: start;
+  text-align: left;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.8rem;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.35);
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.confirm-summary-row.is-active {
+  border-color: rgba(31, 92, 77, 0.28);
+  background: rgba(31, 92, 77, 0.06);
+  color: var(--ink);
+}
+
+.confirm-summary-q {
+  min-width: 0;
+}
+
+.confirm-summary-a {
+  font-weight: 600;
+  color: var(--accent-strong);
+  white-space: nowrap;
+}
+
+.confirm-memo-hint,
+.confirm-empty {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.confirm-freetext {
+  margin-top: 0.25rem;
+}
+
+.camera-viewfinder.is-drag {
+  outline: 2px dashed rgba(212, 232, 222, 0.85);
+  outline-offset: -8px;
+}
+
+.camera-viewfinder.is-drag .camera-placeholder {
+  color: #f4faf7;
+}
+
+@media (max-width: 700px) {
+  .confirm-kbd-hint {
+    display: none;
+  }
+
+  .confirm-summary-row {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+
+  .confirm-summary-a {
+    white-space: normal;
+  }
+}
