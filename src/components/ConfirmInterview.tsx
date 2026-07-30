@@ -1,38 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
-import {
-  pickConfirmQuestions,
-  type ConfirmQuestion,
-} from '../data/confirmQuestions'
-import type { Sex, SymptomId } from '../data/conditions'
+import type { ConfirmQuestion } from '../data/confirmQuestions'
+import type { ConfirmAgendaItem } from '../lib/confirmAgenda'
 import { formatConfirmAnswers } from '../lib/confirmInterview'
 
 interface ConfirmInterviewProps {
-  symptoms: SymptomId[]
-  sex: Sex
-  age: number
+  agendaItems: ConfirmAgendaItem[]
+  questions: ConfirmQuestion[]
   answers: Record<string, string>
   onAnswer: (questionId: string, optionId: string) => void
-  freeText: string
-  onFreeTextChange: (value: string) => void
-  suggestedTellText?: string
 }
 
 export function ConfirmInterview({
-  symptoms,
-  sex,
-  age,
+  agendaItems,
+  questions,
   answers,
   onAnswer,
-  freeText,
-  onFreeTextChange,
-  suggestedTellText,
 }: ConfirmInterviewProps) {
-  const questions = useMemo(
-    () => pickConfirmQuestions({ symptoms, sex, age, max: 8 }),
-    [symptoms, sex, age],
-  )
   const [focusIndex, setFocusIndex] = useState(0)
-
   const active = questions[focusIndex] ?? questions[0]
 
   useEffect(() => {
@@ -51,7 +35,7 @@ export function ConfirmInterview({
       }
       if (e.key === 'ArrowDown' || e.key === 'j') {
         e.preventDefault()
-        setFocusIndex((i) => Math.min(questions.length - 1, i + 1))
+        setFocusIndex((i) => Math.min(Math.max(questions.length - 1, 0), i + 1))
       }
       if (e.key === 'ArrowUp' || e.key === 'k') {
         e.preventDefault()
@@ -63,95 +47,96 @@ export function ConfirmInterview({
   }, [active, onAnswer, questions.length])
 
   const answeredCount = questions.filter((q) => answers[q.id]).length
-  const summaryLines = formatConfirmAnswers(
-    questions
-      .filter((q) => answers[q.id])
-      .map((q) => ({
-        prompt: q.prompt,
-        answerLabel: q.options.find((o) => o.id === answers[q.id])?.label ?? '',
-      })),
+  const summaryLines = useMemo(
+    () =>
+      formatConfirmAnswers(
+        questions
+          .filter((q) => answers[q.id])
+          .map((q) => ({
+            prompt: q.prompt,
+            answerLabel: q.options.find((o) => o.id === answers[q.id])?.label ?? '',
+          })),
+      ),
+    [questions, answers],
   )
-
-  if (questions.length === 0) {
-    return (
-      <div className="confirm-panel">
-        <p className="confirm-empty">
-          いまの症状からは追加の確認質問は少なめです。下の自由記入で気になる点を書いてください（パソコンのキーボードでも入力できます）。
-        </p>
-        <FreeTextField
-          value={freeText}
-          onChange={onFreeTextChange}
-          suggestedText={suggestedTellText}
-        />
-      </div>
-    )
-  }
 
   return (
     <div className="confirm-panel">
-      <div className="confirm-progress-line">
-        <span>
-          確認 {answeredCount} / {questions.length}
-        </span>
-        <span className="confirm-kbd-hint">PC：数字キーで回答 · ↑↓で質問移動</span>
-      </div>
-
-      <ol className="confirm-nav">
-        {questions.map((q, i) => (
-          <li key={q.id}>
-            <button
-              type="button"
-              className={`confirm-nav-dot ${i === focusIndex ? 'is-active' : ''} ${answers[q.id] ? 'is-done' : ''}`}
-              onClick={() => setFocusIndex(i)}
-              aria-label={`質問${i + 1}`}
-            >
-              {i + 1}
-            </button>
-          </li>
+      <section className="confirm-agenda" aria-label="これまでの問診で確認したいこと">
+        <h3 className="confirm-agenda-title">これまでの問診で確認したいこと</h3>
+        {agendaItems.map((item) => (
+          <article key={item.title} className="confirm-agenda-item">
+            <h4>{item.title}</h4>
+            <pre className="confirm-agenda-body">{item.detail}</pre>
+          </article>
         ))}
-      </ol>
+      </section>
 
-      {active && (
-        <QuestionCard
-          question={active}
-          index={focusIndex}
-          total={questions.length}
-          selectedId={answers[active.id]}
-          onSelect={(optionId) => {
-            onAnswer(active.id, optionId)
-            if (focusIndex < questions.length - 1 && !answers[questions[focusIndex + 1]?.id]) {
-              setFocusIndex((i) => i + 1)
-            }
-          }}
-        />
-      )}
-
-      <div className="confirm-all-list">
-        <p className="field-label">すべての確認質問</p>
-        {questions.map((q, i) => (
-          <button
-            key={q.id}
-            type="button"
-            className={`confirm-summary-row ${i === focusIndex ? 'is-active' : ''}`}
-            onClick={() => setFocusIndex(i)}
-          >
-            <span className="confirm-summary-q">{q.prompt}</span>
-            <span className="confirm-summary-a">
-              {q.options.find((o) => o.id === answers[q.id])?.label ?? '未回答'}
+      {questions.length === 0 ? (
+        <p className="confirm-empty">
+          追加の選択式確認は少なめです。内容を確認したら次へ進み、経過の詳細と医師回答を見てください。
+        </p>
+      ) : (
+        <>
+          <div className="confirm-progress-line">
+            <span>
+              確認 {answeredCount} / {questions.length}
             </span>
-          </button>
-        ))}
-      </div>
+            <span className="confirm-kbd-hint">PC：数字キーで回答 · ↑↓で質問移動</span>
+          </div>
 
-      {summaryLines.length > 0 && (
-        <p className="confirm-memo-hint">回答は鑑別スコアと受診メモに反映されます。</p>
+          <ol className="confirm-nav">
+            {questions.map((q, i) => (
+              <li key={q.id}>
+                <button
+                  type="button"
+                  className={`confirm-nav-dot ${i === focusIndex ? 'is-active' : ''} ${answers[q.id] ? 'is-done' : ''}`}
+                  onClick={() => setFocusIndex(i)}
+                  aria-label={`質問${i + 1}`}
+                >
+                  {i + 1}
+                </button>
+              </li>
+            ))}
+          </ol>
+
+          {active && (
+            <QuestionCard
+              question={active}
+              index={focusIndex}
+              total={questions.length}
+              selectedId={answers[active.id]}
+              onSelect={(optionId) => {
+                onAnswer(active.id, optionId)
+                if (focusIndex < questions.length - 1 && !answers[questions[focusIndex + 1]?.id]) {
+                  setFocusIndex((i) => i + 1)
+                }
+              }}
+            />
+          )}
+
+          <div className="confirm-all-list">
+            <p className="field-label">確認項目への回答</p>
+            {questions.map((q, i) => (
+              <button
+                key={q.id}
+                type="button"
+                className={`confirm-summary-row ${i === focusIndex ? 'is-active' : ''}`}
+                onClick={() => setFocusIndex(i)}
+              >
+                <span className="confirm-summary-q">{q.prompt}</span>
+                <span className="confirm-summary-a">
+                  {q.options.find((o) => o.id === answers[q.id])?.label ?? '未回答'}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {summaryLines.length > 0 && (
+            <p className="confirm-memo-hint">回答は鑑別と、次の「医師に聞きたいこと」への回答に反映されます。</p>
+          )}
+        </>
       )}
-
-      <FreeTextField
-        value={freeText}
-        onChange={onFreeTextChange}
-        suggestedText={suggestedTellText}
-      />
     </div>
   )
 }
@@ -188,46 +173,5 @@ function QuestionCard({
         ))}
       </div>
     </article>
-  )
-}
-
-function FreeTextField({
-  value,
-  onChange,
-  suggestedText,
-}: {
-  value: string
-  onChange: (v: string) => void
-  suggestedText?: string
-}) {
-  return (
-    <div className="field confirm-freetext">
-      <span className="field-label">追加で伝えたいこと（パソコンからも自由入力）</span>
-      {suggestedText && (
-        <button
-          type="button"
-          className="btn btn-secondary suggest-fill-btn"
-          onClick={() => onChange(suggestedText)}
-        >
-          スーパードクター提案を入れる
-        </button>
-      )}
-      <textarea
-        className="symptom-textarea"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        rows={5}
-        placeholder={
-          suggestedText
-            ? '提案を入れるか、自分の言葉で書いてください'
-            : '例）昨日の夜から悪化。市販の解熱剤を飲んだ。仕事で長時間座っている。右足だけむくむ気がする——'
-        }
-      />
-      {suggestedText && !value.trim() && (
-        <pre className="suggest-preview" aria-label="追加で伝えたいことの提案">
-          {suggestedText}
-        </pre>
-      )}
-    </div>
   )
 }

@@ -15,7 +15,6 @@ import {
   type SkinSensation,
   type SkinSite,
 } from './data/clinical'
-import { pickConfirmQuestions } from './data/confirmQuestions'
 import {
   contextFlagOptions,
   contextGroups,
@@ -32,11 +31,13 @@ import {
   type Sex,
   type SymptomId,
 } from './data/conditions'
+import { buildConfirmAgenda } from './lib/confirmAgenda'
 import {
   formatConfirmAnswers,
   mergeConfirmPatches,
   optionPatch,
 } from './lib/confirmInterview'
+import { buildDoctorAnswers } from './lib/doctorAnswers'
 import {
   buildVisitSummary,
   dispositionCopy,
@@ -49,7 +50,6 @@ import {
 } from './lib/infer'
 import type { ImageAnalysisResult } from './lib/imageAnalysis'
 import { parseSymptomsFromText } from './lib/parseSymptoms'
-import { suggestVisitNotes } from './lib/suggestVisitNotes'
 import './App.css'
 
 type Step =
@@ -98,13 +98,25 @@ function App() {
   const [contextFlags, setContextFlags] = useState<ContextFlagId[]>([])
   const [doctorQuestions, setDoctorQuestions] = useState('')
   const [confirmAnswers, setConfirmAnswers] = useState<Record<string, string>>({})
-  const [confirmFreeText, setConfirmFreeText] = useState('')
   const [copied, setCopied] = useState(false)
 
-  const confirmQuestionList = useMemo(
-    () => pickConfirmQuestions({ symptoms: selectedSymptoms, sex, age, max: 8 }),
-    [selectedSymptoms, sex, age],
-  )
+  const confirmAgenda = useMemo(() => {
+    const sexLabelNow = sexOptions.find((s) => s.id === sex)?.label ?? ''
+    return buildConfirmAgenda({
+      age,
+      sex,
+      sexLabel: sexLabelNow,
+      symptoms: selectedSymptoms,
+      history,
+      symptomText,
+      photoSummary: imageAnalysis?.summary,
+      redFlagLabels: redFlags
+        .filter((f) => redFlagIds.includes(f.id) && (age < 5 || f.id !== 'infant_lethargy'))
+        .map((f) => f.label),
+    })
+  }, [age, sex, selectedSymptoms, history, symptomText, imageAnalysis?.summary, redFlagIds])
+
+  const confirmQuestionList = confirmAgenda.questions
 
   const confirmPatch = useMemo(() => {
     const patches = confirmQuestionList.map((q) => {
@@ -131,7 +143,7 @@ function App() {
   const effectiveSkinSpreading = confirmPatch.skinSpreading ?? skinSpreading
   const effectiveSkinBlisters = confirmPatch.skinBlisters ?? skinBlisters
 
-  const combinedFreeText = [symptomText, confirmFreeText].filter((t) => t.trim()).join('\n')
+  const combinedFreeText = symptomText
 
   const triage = useMemo(() => evaluateTriage(redFlagIds, age), [redFlagIds, age])
 
@@ -250,42 +262,41 @@ function App() {
     [confirmQuestionList, confirmAnswers],
   )
 
-  const visitSuggestions = useMemo(() => {
-    return suggestVisitNotes({
+  const doctorAnswers = useMemo(
+    () =>
+      buildDoctorAnswers({
+        age,
+        sex,
+        symptoms: effectiveSymptoms,
+        history,
+        durationDays,
+        severity,
+        onset: effectiveOnset,
+        contextFlags: effectiveContextFlags,
+        results,
+        disposition,
+        symptomText,
+        confirmAnswerLines,
+        photoSummary: imageAnalysis?.summary,
+        userQuestions: doctorQuestions,
+      }),
+    [
       age,
       sex,
-      symptoms: effectiveSymptoms,
+      effectiveSymptoms,
       history,
       durationDays,
       severity,
-      onset: effectiveOnset,
-      contextFlags: effectiveContextFlags,
+      effectiveOnset,
+      effectiveContextFlags,
       results,
       disposition,
       symptomText,
       confirmAnswerLines,
-      photoSummary: imageAnalysis?.summary,
-    })
-  }, [
-    age,
-    sex,
-    effectiveSymptoms,
-    history,
-    durationDays,
-    severity,
-    effectiveOnset,
-    effectiveContextFlags,
-    results,
-    disposition,
-    symptomText,
-    confirmAnswerLines,
-    imageAnalysis?.summary,
-  ])
-
-  const displayAskDoctor =
-    doctorQuestions.trim() || visitSuggestions.askDoctorText
-  const displayTellDoctor =
-    confirmFreeText.trim() || visitSuggestions.tellDoctorText
+      imageAnalysis?.summary,
+      doctorQuestions,
+    ],
+  )
 
   const visitSummary = useMemo(() => {
     const skinNote = showSkinQuestions
@@ -331,9 +342,10 @@ function App() {
           (id) => contextFlagOptions.find((c) => c.id === id)?.label ?? id,
         ),
         ...confirmAnswerLines,
-        `追加で伝えたいこと:\n${displayTellDoctor}`,
+        '【これまでの問診で確認したいこと】',
+        ...confirmAgenda.items.map((item) => `${item.title}: ${item.detail.replace(/\n/g, ' / ')}`),
       ],
-      doctorQuestions: displayAskDoctor,
+      doctorQuestions: doctorAnswers.answerText,
     })
   }, [
     age,
@@ -358,8 +370,8 @@ function App() {
     effectivePainQuality,
     effectiveContextFlags,
     confirmAnswerLines,
-    displayTellDoctor,
-    displayAskDoctor,
+    confirmAgenda.items,
+    doctorAnswers.answerText,
   ])
 
   function toggleSymptom(id: SymptomId) {
@@ -444,7 +456,6 @@ function App() {
     setContextFlags([])
     setDoctorQuestions('')
     setConfirmAnswers({})
-    setConfirmFreeText('')
     setCopied(false)
   }
 
@@ -917,20 +928,16 @@ function App() {
               stepIndex={6}
               totalSteps={TOTAL_STEPS}
               title="スーパードクター確認問診"
-              subtitle="症状に合わせて、全科の視点から確認の質問をします。スマホでもパソコンでも答えられます（PCは数字キー対応）。"
+              subtitle="これまでの問診から確認したいことを示します。該当する項目に答えてください（PCは数字キー対応）。"
               onBack={() => setStep('history')}
               onNext={proceedFromConfirm}
-              nextLabel="次へ：経過の詳細"
+              nextLabel="次へ：医師への質問と回答"
             >
               <ConfirmInterview
-                symptoms={selectedSymptoms}
-                sex={sex}
-                age={age}
+                agendaItems={confirmAgenda.items}
+                questions={confirmAgenda.questions}
                 answers={confirmAnswers}
                 onAnswer={onConfirmAnswer}
-                freeText={confirmFreeText}
-                onFreeTextChange={setConfirmFreeText}
-                suggestedTellText={visitSuggestions.tellDoctorText}
               />
             </WizardFrame>
           )}
@@ -940,8 +947,8 @@ function App() {
               key="detail"
               stepIndex={7}
               totalSteps={TOTAL_STEPS}
-              title="経過・熱・受診メモ"
-              subtitle="発症・熱・つらさに加え、追加の要注意サインと医師への質問を整理します。"
+              title="経過と、医師に聞きたいこと"
+              subtitle="発症・熱・つらさを整えたうえで、聞きたいことを書くとスーパードクターが入力全体への回答を出します。"
               onBack={() => setStep('confirm')}
               onNext={() => setStep('result')}
               nextLabel="鑑別と受診方針を見る"
@@ -1123,26 +1130,29 @@ function App() {
 
                 <div className="field">
                   <span className="field-label">医師に聞きたいこと</span>
-                  <button
-                    type="button"
-                    className="btn btn-secondary suggest-fill-btn"
-                    onClick={() => setDoctorQuestions(visitSuggestions.askDoctorText)}
-                  >
-                    スーパードクター提案を入れる
-                  </button>
                   <textarea
                     className="symptom-textarea doctor-questions"
                     value={doctorQuestions}
                     onChange={(e) => setDoctorQuestions(e.target.value)}
-                    rows={5}
-                    placeholder="提案を入れるか、自分の言葉で書いてください"
+                    rows={4}
+                    placeholder="例）仕事は休んだ方がいいですか？／市販薬は何がよいですか？／検査は必要ですか？／何科を受診すべきですか？"
                   />
-                  {!doctorQuestions.trim() && (
-                    <pre className="suggest-preview" aria-label="医師に聞きたいことの提案">
-                      {visitSuggestions.askDoctorText}
-                    </pre>
-                  )}
                 </div>
+
+                <section className="clinical-block suggest-block doctor-answer-live" aria-live="polite">
+                  <h3>入力に対するスーパードクター回答</h3>
+                  <p className="clinical-lead">
+                    これまでの問診・確認回答
+                    {doctorQuestions.trim() ? 'と、上の質問' : ''}
+                    に対する参考回答です。確定診断ではありません。
+                  </p>
+                  {doctorAnswers.blocks.map((block) => (
+                    <article key={block.title} className="doctor-answer-block">
+                      <h4>{block.title}</h4>
+                      <pre className="suggest-answer">{block.body}</pre>
+                    </article>
+                  ))}
+                </section>
               </div>
             </WizardFrame>
           )}
@@ -1304,51 +1314,43 @@ function App() {
                 </ul>
               </section>
 
-              {(confirmAnswerLines.length > 0 || displayTellDoctor) && (
+              {confirmAnswerLines.length > 0 && (
                 <section className="clinical-block">
                   <h3>スーパードクター確認問診の回答</h3>
-                  {confirmAnswerLines.length > 0 && (
-                    <ul className="recheck-list">
-                      {confirmAnswerLines.map((line) => (
-                        <li key={line}>{line}</li>
-                      ))}
-                    </ul>
-                  )}
+                  <ul className="recheck-list">
+                    {confirmAnswerLines.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
                 </section>
               )}
 
               <section className="clinical-block suggest-block">
-                <h3>追加で伝えたいこと</h3>
-                <p className="clinical-lead">
-                  受診時に医師へ渡す要点です。未入力の場合はスーパードクターが症状から提案しています。
-                </p>
-                <pre className="suggest-answer">{displayTellDoctor}</pre>
-                {!confirmFreeText.trim() && (
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setConfirmFreeText(visitSuggestions.tellDoctorText)}
-                  >
-                    この提案を採用する
-                  </button>
-                )}
+                <h3>これまでの問診で確認したこと</h3>
+                {confirmAgenda.items.map((item) => (
+                  <article key={item.title} className="doctor-answer-block">
+                    <h4>{item.title}</h4>
+                    <pre className="confirm-agenda-body">{item.detail}</pre>
+                  </article>
+                ))}
               </section>
 
               <section className="clinical-block suggest-block">
-                <h3>医師に聞きたいこと</h3>
+                <h3>医師に聞きたいことへの回答</h3>
                 <p className="clinical-lead">
-                  診察で確認するとよい質問です。未入力の場合は鑑別と緊急度から提案しています。
+                  問診入力全体
+                  {doctorQuestions.trim() ? `と「${doctorQuestions.trim().slice(0, 40)}${doctorQuestions.trim().length > 40 ? '…' : ''}」` : ''}
+                  に対するスーパードクターの参考回答です。
                 </p>
-                <pre className="suggest-answer">{displayAskDoctor}</pre>
-                {!doctorQuestions.trim() && (
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setDoctorQuestions(visitSuggestions.askDoctorText)}
-                  >
-                    この提案を採用する
-                  </button>
+                {doctorQuestions.trim() && (
+                  <blockquote className="complaint-quote">聞きたいこと: {doctorQuestions.trim()}</blockquote>
                 )}
+                {doctorAnswers.blocks.map((block) => (
+                  <article key={block.title} className="doctor-answer-block">
+                    <h4>{block.title}</h4>
+                    <pre className="suggest-answer">{block.body}</pre>
+                  </article>
+                ))}
               </section>
 
               <section className="clinical-block summary-block">
@@ -1374,7 +1376,7 @@ function App() {
                   確認問診を見直す
                 </button>
                 <button type="button" className="btn btn-ghost" onClick={() => setStep('detail')}>
-                  経過入力を見直す
+                  質問と経過を見直す
                 </button>
                 <button type="button" className="btn btn-primary" onClick={reset}>
                   はじめから
