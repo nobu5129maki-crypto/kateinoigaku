@@ -48,7 +48,7 @@ export function InstallPrompt() {
 
   return (
     <div className="install-banner" role="region" aria-label="アプリをインストール">
-      <img src="/icons/icon-96.png" alt="" width={40} height={40} className="install-icon" />
+      <img src={`${import.meta.env.BASE_URL}icons/icon-96.png`} alt="" width={40} height={40} className="install-icon" />
       <div className="install-copy">
         <strong>家庭の医学</strong>
         <p>

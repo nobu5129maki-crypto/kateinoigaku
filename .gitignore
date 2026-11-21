@@ -24,3 +24,9 @@ dist-ssr
 *.sw?
 
 .vercel
+
+# 購入者の認証情報と鍵はリポジトリに置かない
+*.htpasswd
+config.php
+.env
+.env.*
